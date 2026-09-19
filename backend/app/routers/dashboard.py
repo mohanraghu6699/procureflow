@@ -47,9 +47,11 @@ def get_summary(db: Session = Depends(get_db), current_user: User = Depends(get_
         PurchaseOrder.status.in_([POStatus.OPEN, POStatus.IN_TRANSIT, POStatus.PARTIALLY_DELIVERED])
     ).count()
 
+    # Actual PO price once ordered, otherwise the approved PR amount.
     total_spend = (
         pr_query.filter(PurchaseRequest.status.in_([PRStatus.APPROVED, PRStatus.COMPLETED]))
-        .with_entities(func.coalesce(func.sum(PurchaseRequest.amount), 0))
+        .outerjoin(PurchaseOrder, PurchaseOrder.pr_id == PurchaseRequest.id)
+        .with_entities(func.coalesce(func.sum(func.coalesce(PurchaseOrder.amount, PurchaseRequest.amount)), 0))
         .scalar()
     )
 

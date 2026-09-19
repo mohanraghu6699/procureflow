@@ -50,13 +50,11 @@ function StatCard({
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="text-xs font-medium text-slate-500">{label}</div>
-          <div className="text-2xl font-semibold text-slate-900 mt-1">{value}</div>
-        </div>
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center text-white ${accent}`}>◆</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-xs font-medium text-slate-500">{label}</div>
+        <div className={`w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-white ${accent}`}>◆</div>
       </div>
+      <div className="text-2xl font-semibold text-slate-900 mt-1 whitespace-nowrap">{value}</div>
       {hint && <div className="text-xs text-slate-400 mt-2">{hint}</div>}
     </div>
   );
@@ -92,7 +90,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5 gap-4">
         <StatCard label="Total Purchase Requests" value={String(summary?.total_purchase_requests ?? "—")} accent="bg-blue-500" />
         <StatCard label="Pending Approval" value={String(summary?.pending_approval ?? "—")} accent="bg-amber-500" />
         <StatCard label="Total Purchase Orders" value={String(summary?.total_purchase_orders ?? "—")} accent="bg-emerald-500" />
