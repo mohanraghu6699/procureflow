@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -8,6 +10,7 @@ from app.models import User, UserRole
 from app.schemas import ChangePasswordRequest, LoginRequest, TokenResponse, UserCreate, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+logger = logging.getLogger("procureflow.auth")
 
 
 def _to_user_out(user: User) -> UserOut:
@@ -25,10 +28,13 @@ def _to_user_out(user: User) -> UserOut:
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
     if user is None or not verify_password(payload.password, user.password_hash):
+        logger.warning("Login failed for %s", payload.email)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
     if not user.is_active:
+        logger.warning("Login refused for inactive user %s", user.email)
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
 
+    logger.info("Login succeeded for %s (%s)", user.email, user.role.value)
     token = create_access_token(subject=user.id, extra_claims={"role": user.role.value})
     return TokenResponse(access_token=token, user=_to_user_out(user))
 
@@ -45,6 +51,7 @@ def change_password(
     current_user: User = Depends(get_current_user),
 ):
     if not verify_password(payload.current_password, current_user.password_hash):
+        logger.warning("Password change refused for %s: wrong current password", current_user.email)
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Current password is incorrect")
     if payload.new_password == payload.current_password:
         raise HTTPException(
@@ -53,13 +60,14 @@ def change_password(
 
     current_user.password_hash = hash_password(payload.new_password)
     db.commit()
+    logger.info("Password changed for %s", current_user.email)
 
 
 @router.post("/users", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_user(
     payload: UserCreate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     existing = db.query(User).filter(User.email == payload.email).first()
     if existing is not None:
@@ -75,6 +83,7 @@ def create_user(
     db.add(user)
     db.commit()
     db.refresh(user)
+    logger.info("User %s (%s) created by %s", user.email, user.role.value, admin.email)
     return _to_user_out(user)
 
 

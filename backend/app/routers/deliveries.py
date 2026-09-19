@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -19,6 +20,7 @@ from app.routers.purchase_orders import _to_out as po_to_out
 from app.schemas import DeliveryOut, DeliveryUpdate, PurchaseOrderOut
 
 router = APIRouter(prefix="/api", tags=["deliveries"])
+logger = logging.getLogger("procureflow.deliveries")
 
 STATUS_TO_PO_STATUS = {
     DeliveryStatus.PENDING: POStatus.OPEN,
@@ -86,6 +88,9 @@ def record_delivery(
 
     db.commit()
     db.refresh(po)
+    logger.info("%s delivery marked %s by %s", po.po_number, payload.status.value, current_user.email)
+    if payload.status == DeliveryStatus.DELIVERED:
+        logger.info("%s and %s completed", po.po_number, po.purchase_request.pr_number)
     return po_to_out(po)
 
 

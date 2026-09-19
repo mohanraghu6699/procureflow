@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -24,6 +25,7 @@ from app.schemas import (
 from app.utils import assert_vendor_supplies_category, next_sequence_number
 
 router = APIRouter(prefix="/api/purchase-orders", tags=["purchase-orders"])
+logger = logging.getLogger("procureflow.purchase_orders")
 
 
 def _to_out(po: PurchaseOrder) -> PurchaseOrderOut:
@@ -95,6 +97,9 @@ def create_purchase_order(
     db.add(po)
     db.commit()
     db.refresh(po)
+    logger.info(
+        "%s created for %s by %s (%s %s)", po.po_number, pr.pr_number, current_user.email, po.currency, po.amount
+    )
     return _to_out(po)
 
 

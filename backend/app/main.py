@@ -1,10 +1,18 @@
+import logging
+import time
+import uuid
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.logging_config import configure_logging
 from app.routers import auth, dashboard, deliveries, master_data, purchase_orders, purchase_requests
+
+configure_logging()
+logger = logging.getLogger("procureflow.http")
 
 app = FastAPI(
     title="ProcureFlow API",
@@ -18,7 +26,29 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID"],
 )
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    request_id = uuid.uuid4().hex[:8]
+    started = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception("[%s] %s %s crashed", request_id, request.method, request.url.path)
+        raise
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    response.headers["X-Request-ID"] = request_id
+
+    level = logging.ERROR if response.status_code >= 500 else logging.INFO
+    if request.url.path == "/api/health":
+        level = logging.DEBUG  # probes would otherwise drown out real traffic
+    logger.log(
+        level, "[%s] %s %s -> %d (%.0f ms)", request_id, request.method, request.url.path, response.status_code, elapsed_ms
+    )
+    return response
 
 
 @app.exception_handler(RequestValidationError)

@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 from typing import Optional
 
@@ -28,6 +29,7 @@ from app.schemas import (
 from app.utils import assert_vendor_supplies_category, next_sequence_number
 
 router = APIRouter(prefix="/api/purchase-requests", tags=["purchase-requests"])
+logger = logging.getLogger("procureflow.purchase_requests")
 
 EDITABLE_STATUSES = {PRStatus.DRAFT, PRStatus.REJECTED}
 
@@ -125,6 +127,7 @@ def create_purchase_request(
     _add_history(db, pr, PRStatus.DRAFT, current_user, "Purchase request created", initial=True)
     db.commit()
     db.refresh(pr)
+    logger.info("%s created by %s (%s %s)", pr.pr_number, current_user.email, pr.currency, pr.amount)
     return _to_out(pr)
 
 
@@ -234,6 +237,7 @@ def update_purchase_request(
 
     db.commit()
     db.refresh(pr)
+    logger.info("%s edited by %s (changed: %s)", pr.pr_number, current_user.email, ", ".join(sorted(changes)))
     return _to_out(pr)
 
 
@@ -259,6 +263,7 @@ def submit_purchase_request(
     pr.status = PRStatus.SUBMITTED
     db.commit()
     db.refresh(pr)
+    logger.info("%s submitted by %s", pr.pr_number, current_user.email)
     return _to_out(pr)
 
 
@@ -282,6 +287,7 @@ def approve_purchase_request(
     pr.status = PRStatus.APPROVED
     db.commit()
     db.refresh(pr)
+    logger.info("%s approved by %s", pr.pr_number, current_user.email)
     return _to_out(pr)
 
 
@@ -311,6 +317,7 @@ def reject_purchase_request(
     pr.revision_required = True
     db.commit()
     db.refresh(pr)
+    logger.info("%s rejected by %s: %s", pr.pr_number, current_user.email, reason)
     return _to_out(pr)
 
 
@@ -324,5 +331,7 @@ def delete_purchase_request(
     if pr.status != PRStatus.DRAFT:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only draft purchase requests can be deleted")
 
+    pr_number = pr.pr_number
     db.delete(pr)
     db.commit()
+    logger.info("Draft %s deleted by %s", pr_number, current_user.email)
