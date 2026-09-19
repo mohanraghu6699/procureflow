@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -22,10 +23,9 @@ app.add_middleware(
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    return JSONResponse(
-        status_code=422,
-        content={"detail": "Validation error", "errors": exc.errors()},
-    )
+    # errors() can hold Decimals (gt=0) or exception objects (custom validators), which plain JSON can't encode.
+    errors = jsonable_encoder(exc.errors(), custom_encoder={Exception: str})
+    return JSONResponse(status_code=422, content={"detail": "Validation error", "errors": errors})
 
 
 @app.exception_handler(HTTPException)
