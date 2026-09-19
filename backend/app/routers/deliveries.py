@@ -17,7 +17,7 @@ from app.models import (
     Delivery,
 )
 from app.routers.purchase_orders import _to_out as po_to_out
-from app.schemas import DeliveryOut, DeliveryUpdate, PurchaseOrderOut
+from app.schemas import DeliveryOut, DeliveryUpdate, PaginatedDeliveries, PurchaseOrderOut
 
 router = APIRouter(prefix="/api", tags=["deliveries"])
 logger = logging.getLogger("procureflow.deliveries")
@@ -94,15 +94,26 @@ def record_delivery(
     return po_to_out(po)
 
 
-@router.get("/deliveries", response_model=list[DeliveryOut])
+@router.get("/deliveries", response_model=PaginatedDeliveries)
 def list_deliveries(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.APPROVER, UserRole.ADMIN)),
     status_filter: Optional[DeliveryStatus] = Query(default=None, alias="status"),
-    limit: int = Query(default=50, ge=1, le=200),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
 ):
     query = db.query(Delivery)
     if status_filter is not None:
         query = query.filter(Delivery.status == status_filter)
-    deliveries = query.order_by(Delivery.updated_at.desc()).limit(limit).all()
-    return [_to_out(d) for d in deliveries]
+
+    total = query.count()
+    # id breaks ties so rows recorded in the same instant can't swap places between pages
+    deliveries = (
+        query.order_by(Delivery.updated_at.desc(), Delivery.id)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return PaginatedDeliveries(
+        items=[_to_out(d) for d in deliveries], total=total, page=page, page_size=page_size
+    )

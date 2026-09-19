@@ -247,6 +247,13 @@ class PaginatedPurchaseOrders(BaseModel):
     page_size: int
 
 
+class PaginatedDeliveries(BaseModel):
+    items: list[DeliveryOut]
+    total: int
+    page: int
+    page_size: int
+
+
 # ---------- Delivery ----------
 
 

@@ -2,14 +2,21 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { listDeliveries } from "../api/endpoints";
+import { Pagination } from "../components/Pagination";
 import { StatusBadge, statusLabel } from "../components/StatusBadge";
 import type { DeliveryStatus } from "../types";
 
 const STATUSES: DeliveryStatus[] = ["IN_TRANSIT", "PARTIAL", "DELIVERED"];
+const PAGE_SIZE = 10;
 
 export function Deliveries() {
   const [status, setStatus] = useState("");
-  const query = useQuery({ queryKey: ["deliveries", status], queryFn: () => listDeliveries(status || undefined) });
+  const [page, setPage] = useState(1);
+  const query = useQuery({
+    queryKey: ["deliveries", status, page],
+    queryFn: () => listDeliveries({ status: status || undefined, page, page_size: PAGE_SIZE }),
+  });
+  const items = query.data?.items;
 
   return (
     <div className="space-y-4">
@@ -20,7 +27,10 @@ export function Deliveries() {
         </div>
         <select
           value={status}
-          onChange={(e) => setStatus(e.target.value)}
+          onChange={(e) => {
+            setStatus(e.target.value);
+            setPage(1);
+          }}
           className="rounded-lg border border-slate-300 px-3 py-2 text-sm"
         >
           <option value="">All Statuses</option>
@@ -44,7 +54,7 @@ export function Deliveries() {
             </tr>
           </thead>
           <tbody>
-            {query.data?.map((d) => (
+            {items?.map((d) => (
               <tr key={d.id} className="border-b border-slate-100 last:border-0 hover:bg-brand-50 transition-colors">
                 <td className="px-4 py-3">
                   <Link to={`/purchase-orders/${d.po_id}`} className="text-brand-600 font-medium">
@@ -61,7 +71,7 @@ export function Deliveries() {
                 </td>
               </tr>
             ))}
-            {query.data?.length === 0 && (
+            {items?.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-400">
                   No delivery records found
@@ -70,6 +80,7 @@ export function Deliveries() {
             )}
           </tbody>
         </table></div>
+        {query.data && <Pagination page={page} pageSize={PAGE_SIZE} total={query.data.total} onPageChange={setPage} />}
       </div>
     </div>
   );
