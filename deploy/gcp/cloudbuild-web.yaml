@@ -1,0 +1,15 @@
+# Builds the frontend image. The API URL is baked into the JavaScript bundle at build time
+# (Vite reads VITE_API_BASE_URL then), so the API must be deployed first to know its URL.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag
+      - ${_IMAGE}
+      - --build-arg
+      - VITE_API_BASE_URL=${_API_URL}
+      - .
+images:
+  - ${_IMAGE}
+options:
+  logging: CLOUD_LOGGING_ONLY

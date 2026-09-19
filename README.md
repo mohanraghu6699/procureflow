@@ -157,6 +157,47 @@ Open http://localhost:5173.
 
 The login page also has one-click buttons to fill these in.
 
+## Deploying to Google Cloud
+
+`deploy/gcp/` holds two scripts that create and remove a small deployment, so it can be stood up for a demo and deleted afterwards:
+
+```bash
+gcloud auth login                          # once; billing must be enabled on the project
+bash deploy/gcp/deploy.sh                  # PROJECT_ID / REGION default to your gcloud config / us-central1
+bash deploy/gcp/update.sh                  # later: ship new code only (see below)
+bash deploy/gcp/destroy.sh                 # deletes everything it created
+```
+
+**Shipping code changes.** `deploy.sh` creates the infrastructure once; after that use `update.sh`, which only rebuilds and redeploys the app and leaves Cloud SQL, secrets, service accounts and all data alone:
+
+```bash
+bash deploy/gcp/update.sh          # API + web
+bash deploy/gcp/update.sh api      # backend only
+bash deploy/gcp/update.sh web      # frontend only
+```
+
+Database migrations run automatically when the new API revision starts (`alembic upgrade head` before the server). If a migration fails the new revision never becomes ready and Cloud Run keeps serving the previous version. `update.sh` refuses to run, and says why, if the infrastructure is missing.
+
+Run them from **Git Bash** or Cloud Shell. On Windows do not use the `bash` that PowerShell finds — that is WSL, which does not have your `gcloud` login (the script detects this and says so). Images are built by Cloud Build, so Docker is not needed locally.
+
+| Piece | Service |
+|---|---|
+| Database | Cloud SQL for PostgreSQL 16 (`db-f1-micro`; the API reaches it through the Cloud Run Cloud SQL connector — the instance has no authorized networks, so nothing else can connect to it directly) |
+| API | Cloud Run, image from `backend/Dockerfile` (runs Alembic migrations and seeding on start) |
+| Web | Cloud Run, image from `frontend/Dockerfile` (nginx serving the Vite build) |
+| Secrets | Secret Manager: database URL and JWT signing key are generated randomly and injected as environment variables |
+| Identities | Three dedicated service accounts, none of them a default one: `procureflow-run` (API: Cloud SQL client + read its two secrets), `procureflow-web` (no permissions), `procureflow-build` (Cloud Build) |
+| HTTPS | Provided by Cloud Run on the `*.run.app` URLs |
+
+The script is re-runnable (existing resources are reused, services are redeployed), ends with a smoke test (health, seeded login, frontend), and prints the URLs. The API's `CORS_ORIGINS` is set to the web app's URL after it is deployed.
+
+Things to know:
+
+- **Cost:** Cloud SQL bills for as long as the instance exists (roughly $8–12/month at this size); Cloud Run and the rest fit in free tiers at demo traffic. Run `destroy.sh` when you are done.
+- **Public demo:** the URL is open to the internet and the seeded accounts have the well-known passwords above. It contains only synthetic data; change the passwords (Change password in the UI) if you leave it up.
+- **Trade-offs for a demo:** the app connects as the built-in `postgres` user (a dedicated least-privilege user would be the hardening step), the API is limited to one instance so concurrent start-up migrations can't race, and instances scale to zero, so the first request after idle is slow.
+- `deploy.sh` has been run end to end against a real GCP project: API and web deployed, and the smoke test (health, seeded admin login, frontend) passed. It only deletes resources named `procureflow-*` that it created itself.
+
 ## Running the tests
 
 ```bash
@@ -208,7 +249,7 @@ Key endpoint groups:
 - `GET /api/dashboard/summary` (counts, PR and PO status breakdowns, monthly trend, period-over-period trends), `GET /api/dashboard/recent-activity`
 - `GET /api/health`
 
-All endpoints (except `/api/health` and `/api/auth/login`) require a `Authorization: Bearer <token>` header. List endpoints support `search`, relevant filters, `sort_by`/`sort_dir`, and `page`/`page_size` pagination (PRs: `status`, `department_id`, `category_id`, `mine`, `awaiting_po`; POs: `status`, `vendor_id`, sortable by number, amount, required date or created date).
+All endpoints (except `/api/health` and `/api/auth/login`) require a `Authorization: Bearer <token>` header. List endpoints support `search`, relevant filters, `sort_by`/`sort_dir`, and `page`/`page_size` pagination (PRs: `status`, `department_id`, `category_id`, `mine`, `awaiting_po`; POs: `status`, `vendor_id`, sortable by number, amount, required date or created date; deliveries: `status`, newest first). All paginated lists return `{items, total, page, page_size}`.
 
 Errors use a consistent shape: `{"detail": "<message>"}` for business-rule failures (`400`/`401`/`403`/`404`/`409`) and `{"detail": "Validation error", "errors": [...]}` for invalid input (`422`).
 
@@ -243,9 +284,9 @@ All architectural and business-logic decisions (data model, status rules, role p
 - No forgot-password flow: users can change their own password while logged in, but a forgotten password needs an admin to reissue one. User provisioning is admin-only (`POST /api/auth/users`) with no self-registration, which is appropriate for an internal procurement tool but worth calling out.
 - A Purchase Order is 1:1 with its Purchase Request (no partial/multi-PO fulfillment against a single PR).
 - `docker-compose.yml` is provided but not fully verified end-to-end in this environment (no local Docker) — see the setup note above.
-- CI is defined (`.github/workflows/ci.yml`) but there is no CD and no cloud deployment in this submission.
+- CI is defined (`.github/workflows/ci.yml`) but there is no automated CD: cloud deployment is a script you run by hand (`deploy/gcp/`), and there is no staging/production split, custom domain or monitoring/alerting on it.
 - Rate limiting, refresh tokens and metrics/monitoring are not implemented (JWT access tokens are long-lived — 8 hours — for demo convenience rather than using refresh tokens). Logging is plain-text to stdout rather than JSON/shipped to a log service.
-- The Deliveries page lists the 50 most recent updates without pagination (the API caps the list at 200).- **The app runs over plain HTTP in this local setup (`http://localhost:8000`/`5173`), which is fine for local development only.** The login request sends the plaintext password in the request body — this is the standard, correct approach for password auth (the server must see it once to verify against the bcrypt hash; nothing beyond that comparison is stored or logged), but it depends entirely on transport encryption to be safe over a real network. **HTTPS/TLS is a hard requirement before any non-local deployment** — it is not optional hardening. Cloud Run (the planned GCP deployment target) provides TLS termination automatically, which is expected to close this gap when deployed.
+- **The app runs over plain HTTP in this local setup (`http://localhost:8000`/`5173`), which is fine for local development only.** The login request sends the plaintext password in the request body — this is the standard, correct approach for password auth (the server must see it once to verify against the bcrypt hash; nothing beyond that comparison is stored or logged), but it depends entirely on transport encryption to be safe over a real network. **HTTPS/TLS is a hard requirement before any non-local deployment** — it is not optional hardening. Cloud Run (the GCP deployment target in `deploy/gcp/`) provides TLS termination automatically, which closes this gap for that deployment.
 
 ## Future Enhancements
 

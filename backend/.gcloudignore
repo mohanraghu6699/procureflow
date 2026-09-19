@@ -1,0 +1,8 @@
+# What `gcloud builds submit` must NOT upload to Cloud Build.
+venv/
+__pycache__/
+*.pyc
+.env
+*.log
+tests/
+.pytest_cache/

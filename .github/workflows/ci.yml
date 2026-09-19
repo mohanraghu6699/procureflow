@@ -60,3 +60,32 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  docker:
+    name: Docker Compose smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and start the stack
+        run: docker compose up --build -d
+      - name: Wait for the API (migrations and seeding run first)
+        run: |
+          for i in $(seq 1 45); do
+            if curl -sf http://localhost:8000/api/health; then exit 0; fi
+            sleep 2
+          done
+          echo "API did not become healthy in time"
+          exit 1
+      - name: Log in with a seeded account
+        run: |
+          curl -sf -X POST http://localhost:8000/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"admin@procureflow.com","password":"Admin@123"}' | grep -q access_token
+      - name: Frontend is served
+        run: curl -sf http://localhost:5173/ | grep -q 'id="root"'
+      - name: Container logs (on failure)
+        if: failure()
+        run: docker compose logs
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
