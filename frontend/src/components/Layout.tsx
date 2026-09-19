@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { ChangePasswordModal } from "./ChangePasswordModal";
+import { fetchDashboardSummary } from "../api/endpoints";
 import { useAuth } from "../context/AuthContext";
 
 const NAV_ITEMS = [
@@ -19,6 +21,15 @@ export function Layout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const canApprove = user?.role === "APPROVER" || user?.role === "ADMIN";
+  const summaryQuery = useQuery({
+    queryKey: ["dashboard-summary"],
+    queryFn: fetchDashboardSummary,
+    enabled: canApprove,
+    refetchInterval: 30000,
+  });
+  const pendingApprovals = summaryQuery.data?.pending_approval ?? 0;
 
   function handleLogout() {
     logout();
@@ -68,6 +79,14 @@ export function Layout() {
             >
               <span>{item.icon}</span>
               {item.label}
+              {item.to === "/approvals" && pendingApprovals > 0 && (
+                <span
+                  aria-label={`${pendingApprovals} pending`}
+                  className="ml-auto min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[11px] font-semibold flex items-center justify-center"
+                >
+                  {pendingApprovals}
+                </span>
+              )}
             </NavLink>
           ))}
         </nav>

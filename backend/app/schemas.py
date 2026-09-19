@@ -269,6 +269,19 @@ class MonthlyTrendPoint(BaseModel):
     po_count: int
 
 
+class TrendPoint(BaseModel):
+    current: Decimal
+    previous: Decimal
+
+
+class DashboardTrends(BaseModel):
+    prs_created_month: TrendPoint
+    pos_created_month: TrendPoint
+    submitted_week: TrendPoint
+    ordered_week: TrendPoint
+    approved_spend_month: TrendPoint
+
+
 class DashboardSummary(BaseModel):
     total_purchase_requests: int
     pending_approval: int
@@ -277,6 +290,7 @@ class DashboardSummary(BaseModel):
     total_spend_approved: Decimal
     pr_by_status: list[StatusCount]
     monthly_trend: list[MonthlyTrendPoint]
+    trends: DashboardTrends
 
 
 class RecentActivityItem(BaseModel):

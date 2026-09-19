@@ -40,3 +40,28 @@ export function openOrderDue(requiredDate: string): DueInfo {
   return { label: `Due in ${plural(remaining)}`, tone: "neutral" };
 }
 
+
+export interface TrendInfo {
+  text: string;
+  tone: "up" | "down" | "flat";
+}
+
+// Period-over-period change for a dashboard card, e.g. "+12% vs last month". With nothing to compare
+// against (previous = 0) it falls back to a plain count so a new system doesn't show "Infinity%".
+export function describeTrend(
+  point: { current: string | number; previous: string | number },
+  period: "month" | "week",
+  noun: string,
+  money = false
+): TrendInfo {
+  const current = Number(point.current);
+  const previous = Number(point.previous);
+  const shown = money ? formatCurrency(current) : String(current);
+
+  if (previous === 0 && current === 0) return { text: `Nothing ${noun} this ${period}`, tone: "flat" };
+  if (previous === 0) return { text: `${shown} ${noun} this ${period}`, tone: "up" };
+
+  const pct = Math.round(((current - previous) / previous) * 100);
+  if (pct === 0) return { text: `0% vs last ${period}`, tone: "flat" };
+  return { text: `${pct > 0 ? "+" : ""}${pct}% vs last ${period}`, tone: pct > 0 ? "up" : "down" };
+}

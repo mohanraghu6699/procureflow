@@ -117,6 +117,7 @@ export interface DashboardSummary {
   total_spend_approved: string;
   pr_by_status: { status: string; count: number }[];
   monthly_trend: { month: string; pr_count: number; po_count: number }[];
+  trends: DashboardTrends;
 }
 
 export interface RecentActivityItem {
@@ -124,4 +125,17 @@ export interface RecentActivityItem {
   type: string;
   message: string;
   timestamp: string;
+}
+
+export interface TrendPoint {
+  current: string;
+  previous: string;
+}
+
+export interface DashboardTrends {
+  prs_created_month: TrendPoint;
+  pos_created_month: TrendPoint;
+  submitted_week: TrendPoint;
+  ordered_week: TrendPoint;
+  approved_spend_month: TrendPoint;
 }

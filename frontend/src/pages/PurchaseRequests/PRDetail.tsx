@@ -36,6 +36,7 @@ export function PRDetail() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["purchase-request", id] });
     queryClient.invalidateQueries({ queryKey: ["purchase-requests"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
   };
 
   const submitMutation = useMutation({
