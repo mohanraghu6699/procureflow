@@ -105,7 +105,7 @@ def list_purchase_orders(
     status_filter: Optional[POStatus] = Query(default=None, alias="status"),
     vendor_id: Optional[str] = None,
     search: Optional[str] = None,
-    sort_by: str = Query(default="created_at", pattern="^(created_at|amount|po_number)$"),
+    sort_by: str = Query(default="created_at", pattern="^(created_at|amount|po_number|required_date)$"),
     sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
@@ -127,7 +127,13 @@ def list_purchase_orders(
 
     total = query.count()
 
-    sort_column = getattr(PurchaseOrder, sort_by)
+    sort_columns = {
+        "created_at": PurchaseOrder.created_at,
+        "amount": PurchaseOrder.amount,
+        "po_number": PurchaseOrder.po_number,
+        "required_date": PurchaseRequest.required_date,
+    }
+    sort_column = sort_columns[sort_by]
     sort_column = sort_column.desc() if sort_dir == "desc" else sort_column.asc()
     query = query.order_by(sort_column)
 
