@@ -289,6 +289,7 @@ class DashboardSummary(BaseModel):
     pending_delivery: int
     total_spend_approved: Decimal
     pr_by_status: list[StatusCount]
+    po_by_status: list[StatusCount]
     monthly_trend: list[MonthlyTrendPoint]
     trends: DashboardTrends
 

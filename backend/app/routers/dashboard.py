@@ -29,6 +29,9 @@ from app.schemas import (
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
+# POStatus.DELIVERED is never assigned (delivering completes the PO), so it isn't summarised.
+PO_SUMMARY_STATUSES = [POStatus.OPEN, POStatus.IN_TRANSIT, POStatus.PARTIALLY_DELIVERED, POStatus.COMPLETED]
+
 ACTIVITY_VERB = {
     PRStatus.DRAFT: "created",
     PRStatus.SUBMITTED: "submitted for approval",
@@ -71,6 +74,14 @@ def get_summary(db: Session = Depends(get_db), current_user: User = Depends(get_
     for status_value, count in status_rows:
         status_counts[status_value.value] = count
     pr_by_status = [StatusCount(status=k, count=v) for k, v in status_counts.items()]
+
+    po_counts = {s.value: 0 for s in PO_SUMMARY_STATUSES}
+    for status_value, count in (
+        po_query.with_entities(PurchaseOrder.status, func.count()).group_by(PurchaseOrder.status).all()
+    ):
+        if status_value.value in po_counts:
+            po_counts[status_value.value] = count
+    po_by_status = [StatusCount(status=k, count=v) for k, v in po_counts.items()]
 
     today = datetime.utcnow().replace(day=1)
     months = [(today - relativedelta(months=i)) for i in range(8, -1, -1)]
@@ -153,6 +164,7 @@ def get_summary(db: Session = Depends(get_db), current_user: User = Depends(get_
         pending_delivery=pending_delivery,
         total_spend_approved=Decimal(total_spend or 0),
         pr_by_status=pr_by_status,
+        po_by_status=po_by_status,
         monthly_trend=monthly_trend,
         trends=trends,
     )

@@ -59,7 +59,9 @@ export function describeTrend(
   const shown = money ? formatCurrency(current) : String(current);
 
   if (previous === 0 && current === 0) return { text: `Nothing ${noun} this ${period}`, tone: "flat" };
-  if (previous === 0) return { text: `${shown} ${noun} this ${period}`, tone: "up" };
+  if (previous === 0) {
+    return { text: money ? `${shown} this ${period}` : `${shown} ${noun} this ${period}`, tone: "up" };
+  }
 
   const pct = Math.round(((current - previous) / previous) * 100);
   if (pct === 0) return { text: `0% vs last ${period}`, tone: "flat" };

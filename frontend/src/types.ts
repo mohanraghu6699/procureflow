@@ -116,6 +116,7 @@ export interface DashboardSummary {
   pending_delivery: number;
   total_spend_approved: string;
   pr_by_status: { status: string; count: number }[];
+  po_by_status: { status: string; count: number }[];
   monthly_trend: { month: string; pr_count: number; po_count: number }[];
   trends: DashboardTrends;
 }
