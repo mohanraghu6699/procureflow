@@ -12,6 +12,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE/../.."   # repo root: gcloud gets relative paths, which behave the same on Windows and Linux
 # shellcheck source=config.sh
 source "$HERE/config.sh"
+# shellcheck source=services.sh
+source "$HERE/services.sh"
 
 TAG="${TAG:-$(date +%Y%m%d%H%M%S)}"
 IMAGE_BASE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}"
@@ -105,56 +107,8 @@ if ! gcloud artifacts repositories describe "$REPO" --location "$REGION" >/dev/n
 fi
 
 # ---------------------------------------------------------------------------------------------
-log "Building and deploying the API (migrations and seeding run when the container starts)"
-gcloud builds submit backend --config deploy/gcp/cloudbuild-api.yaml \
-  --substitutions "_IMAGE=${IMAGE_BASE}/api:${TAG}" --service-account "$BUILD_SA_PATH" --quiet
-gcloud run deploy "$API_SERVICE" \
-  --image "${IMAGE_BASE}/api:${TAG}" --region "$REGION" \
-  --port 8000 --allow-unauthenticated \
-  --service-account "$RUN_SA" \
-  --add-cloudsql-instances "$CONNECTION_NAME" \
-  --set-secrets "DATABASE_URL=${SECRET_DATABASE_URL}:latest,JWT_SECRET_KEY=${SECRET_JWT}:latest" \
-  --set-env-vars "LOG_LEVEL=INFO" \
-  --min-instances 0 --max-instances 1 --memory 512Mi --quiet
-API_URL="$(gcloud run services describe "$API_SERVICE" --region "$REGION" --format='value(status.url)')"
-
-log "Building and deploying the web app (API URL ${API_URL} is baked into the bundle)"
-gcloud builds submit frontend --config deploy/gcp/cloudbuild-web.yaml \
-  --substitutions "_IMAGE=${IMAGE_BASE}/web:${TAG},_API_URL=${API_URL}" --service-account "$BUILD_SA_PATH" --quiet
-gcloud run deploy "$WEB_SERVICE" \
-  --image "${IMAGE_BASE}/web:${TAG}" --region "$REGION" \
-  --port 80 --allow-unauthenticated \
-  --service-account "$WEB_SA" \
-  --min-instances 0 --max-instances 2 --memory 256Mi --quiet
-WEB_URL="$(gcloud run services describe "$WEB_SERVICE" --region "$REGION" --format='value(status.url)')"
-
-# The API only accepts browser calls from the web app's origin. Cloud Run serves a service on two URL
-# forms, so allow both. (The "^@^" prefix makes "@" the list separator so the commas in the value survive.)
-ALT_WEB_URL="https://${WEB_SERVICE}-${PROJECT_NUMBER}.${REGION}.run.app"
-log "Allowing ${WEB_URL} to call the API (CORS)"
-gcloud run services update "$API_SERVICE" --region "$REGION" \
-  --update-env-vars "^@^CORS_ORIGINS=${WEB_URL},${ALT_WEB_URL}" --quiet
-
-# ---------------------------------------------------------------------------------------------
-log "Smoke test"
-ok=0
-for _ in $(seq 1 20); do
-  if curl -sf "${API_URL}/api/health" >/dev/null; then ok=1; break; fi
-  sleep 3
-done
-[ "$ok" = "1" ] || die "API did not become healthy. Check logs: gcloud run services logs read ${API_SERVICE} --region ${REGION}"
-curl -sf -X POST "${API_URL}/api/auth/login" -H "Content-Type: application/json" \
-  -d '{"email":"admin@procureflow.com","password":"Admin@123"}' | grep -q access_token \
-  || die "Login with the seeded admin failed"
-curl -sf "${WEB_URL}/" | grep -q 'id="root"' || die "The web app is not serving"
-
-cat <<EOF
-
-Deployed.
-  Web app : ${WEB_URL}
-  API     : ${API_URL}   (Swagger UI: ${API_URL}/docs)
-  Login   : admin@procureflow.com / Admin@123   (other demo accounts are in the README)
-
-This is a public URL with well-known demo passwords and only synthetic data. Cloud SQL is billed for as
-long as it exists, so remove everything when you are done:  bash deploy/gcp/destroy.sh
-EOF
+deploy_api
+deploy_web
+allow_cors
+smoke_test
+print_summary

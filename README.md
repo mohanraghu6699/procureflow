@@ -164,8 +164,19 @@ The login page also has one-click buttons to fill these in.
 ```bash
 gcloud auth login                          # once; billing must be enabled on the project
 bash deploy/gcp/deploy.sh                  # PROJECT_ID / REGION default to your gcloud config / us-central1
+bash deploy/gcp/update.sh                  # later: ship new code only (see below)
 bash deploy/gcp/destroy.sh                 # deletes everything it created
 ```
+
+**Shipping code changes.** `deploy.sh` creates the infrastructure once; after that use `update.sh`, which only rebuilds and redeploys the app and leaves Cloud SQL, secrets, service accounts and all data alone:
+
+```bash
+bash deploy/gcp/update.sh          # API + web
+bash deploy/gcp/update.sh api      # backend only
+bash deploy/gcp/update.sh web      # frontend only
+```
+
+Database migrations run automatically when the new API revision starts (`alembic upgrade head` before the server). If a migration fails the new revision never becomes ready and Cloud Run keeps serving the previous version. `update.sh` refuses to run, and says why, if the infrastructure is missing.
 
 Run them from **Git Bash** or Cloud Shell. On Windows do not use the `bash` that PowerShell finds — that is WSL, which does not have your `gcloud` login (the script detects this and says so). Images are built by Cloud Build, so Docker is not needed locally.
 
