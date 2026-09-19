@@ -266,6 +266,11 @@ def reject_purchase_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_roles(UserRole.APPROVER, UserRole.ADMIN)),
 ):
+    reason = (payload.comment or "").strip()
+    if not reason:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="A reason is required to reject a purchase request"
+        )
     pr = _get_pr_or_404(db, pr_id)
     if pr.status != PRStatus.SUBMITTED:
         raise HTTPException(
@@ -275,7 +280,7 @@ def reject_purchase_request(
     if pr.requester_id == current_user.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Requesters cannot reject their own purchase request")
 
-    _add_history(db, pr, PRStatus.REJECTED, current_user, payload.comment or "Rejected")
+    _add_history(db, pr, PRStatus.REJECTED, current_user, reason)
     pr.status = PRStatus.REJECTED
     db.commit()
     db.refresh(pr)

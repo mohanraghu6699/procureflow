@@ -53,7 +53,7 @@ export function PRDetail() {
     onError: (err) => setError(getErrorMessage(err)),
   });
   const rejectMutation = useMutation({
-    mutationFn: () => rejectPurchaseRequest(id as string, comment || undefined),
+    mutationFn: () => rejectPurchaseRequest(id as string, comment.trim()),
     onSuccess: () => {
       setComment("");
       invalidate();
@@ -192,7 +192,7 @@ export function PRDetail() {
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Optional comment..."
+                placeholder="Comment (optional to approve, required to reject)"
                 rows={2}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
@@ -205,7 +205,14 @@ export function PRDetail() {
                   Approve
                 </button>
                 <button
-                  onClick={() => rejectMutation.mutate()}
+                  onClick={() => {
+                    if (!comment.trim()) {
+                      setError("Add a reason in the comment box before rejecting.");
+                      return;
+                    }
+                    setError("");
+                    rejectMutation.mutate();
+                  }}
                   disabled={rejectMutation.isPending}
                   className="text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg px-4 py-2 disabled:opacity-60"
                 >

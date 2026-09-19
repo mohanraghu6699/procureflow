@@ -3,16 +3,20 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { approvePurchaseRequest, listPurchaseRequests, rejectPurchaseRequest } from "../api/endpoints";
 import { getErrorMessage } from "../api/client";
+import { DecisionDialog } from "../components/DecisionDialog";
 import { Pagination } from "../components/Pagination";
 import { useAuth } from "../context/AuthContext";
+import type { PurchaseRequest } from "../types";
 import { formatCurrency } from "../utils/format";
 
+type Decision = { pr: PurchaseRequest; mode: "approve" | "reject" };
 
 export function Approvals() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
-  const [error, setError] = useState("");
+  const [decision, setDecision] = useState<Decision | null>(null);
+  const [decisionError, setDecisionError] = useState("");
   const pageSize = 10;
 
   const query = useQuery({
@@ -20,22 +24,22 @@ export function Approvals() {
     queryFn: () => listPurchaseRequests({ status: "SUBMITTED", page, page_size: pageSize, sort_by: "created_at", sort_dir: "asc" }),
   });
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: ["approvals"] });
-    queryClient.invalidateQueries({ queryKey: ["purchase-requests"] });
-    queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
-  };
+  const decisionMutation = useMutation({
+    mutationFn: ({ id, mode, comment }: { id: string; mode: Decision["mode"]; comment: string }) =>
+      mode === "approve" ? approvePurchaseRequest(id, comment || undefined) : rejectPurchaseRequest(id, comment),
+    onSuccess: () => {
+      setDecision(null);
+      queryClient.invalidateQueries({ queryKey: ["approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["purchase-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
+    },
+    onError: (err) => setDecisionError(getErrorMessage(err)),
+  });
 
-  const approveMutation = useMutation({
-    mutationFn: (id: string) => approvePurchaseRequest(id),
-    onSuccess: invalidate,
-    onError: (err) => setError(getErrorMessage(err)),
-  });
-  const rejectMutation = useMutation({
-    mutationFn: (id: string) => rejectPurchaseRequest(id),
-    onSuccess: invalidate,
-    onError: (err) => setError(getErrorMessage(err)),
-  });
+  function openDecision(pr: PurchaseRequest, mode: Decision["mode"]) {
+    setDecisionError("");
+    setDecision({ pr, mode });
+  }
 
   return (
     <div className="space-y-4">
@@ -43,8 +47,6 @@ export function Approvals() {
         <h1 className="text-xl font-semibold text-slate-900">Approvals</h1>
         <p className="text-sm text-slate-500">Purchase requests awaiting your decision</p>
       </div>
-
-      {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-sm">
@@ -70,7 +72,7 @@ export function Approvals() {
                   </td>
                   <td className="px-4 py-3 text-slate-600 max-w-xs truncate">{pr.description}</td>
                   <td className="px-4 py-3 text-slate-600">{pr.requester_name}</td>
-                  <td className="px-4 py-3 text-slate-700">
+                  <td className="px-4 py-3 text-slate-700 whitespace-nowrap">
                     {pr.currency} {formatCurrency(pr.amount)}
                   </td>
                   <td className="px-4 py-3 text-slate-600">{new Date(pr.required_date).toLocaleDateString()}</td>
@@ -80,16 +82,14 @@ export function Approvals() {
                     ) : (
                       <div className="flex gap-2 justify-end">
                         <button
-                          onClick={() => approveMutation.mutate(pr.id)}
-                          disabled={approveMutation.isPending}
-                          className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-md px-3 py-1.5 disabled:opacity-60"
+                          onClick={() => openDecision(pr, "approve")}
+                          className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-md px-3 py-1.5"
                         >
                           Approve
                         </button>
                         <button
-                          onClick={() => rejectMutation.mutate(pr.id)}
-                          disabled={rejectMutation.isPending}
-                          className="text-xs bg-red-600 hover:bg-red-700 text-white rounded-md px-3 py-1.5 disabled:opacity-60"
+                          onClick={() => openDecision(pr, "reject")}
+                          className="text-xs bg-red-600 hover:bg-red-700 text-white rounded-md px-3 py-1.5"
                         >
                           Reject
                         </button>
@@ -110,6 +110,19 @@ export function Approvals() {
         </table></div>
         {query.data && <Pagination page={page} pageSize={pageSize} total={query.data.total} onPageChange={setPage} />}
       </div>
+
+      {decision && (
+        <DecisionDialog
+          key={`${decision.pr.id}-${decision.mode}`}
+          mode={decision.mode}
+          title={`${decision.mode === "approve" ? "Approve" : "Reject"} ${decision.pr.pr_number}?`}
+          subtitle={`${decision.pr.description} — ${decision.pr.currency} ${formatCurrency(decision.pr.amount)}`}
+          isSubmitting={decisionMutation.isPending}
+          error={decisionError}
+          onConfirm={(comment) => decisionMutation.mutate({ id: decision.pr.id, mode: decision.mode, comment })}
+          onCancel={() => setDecision(null)}
+        />
+      )}
     </div>
   );
 }
