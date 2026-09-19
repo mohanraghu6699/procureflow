@@ -198,7 +198,6 @@ class PurchaseOrderCreate(BaseModel):
     pr_id: str
     vendor_id: str
     amount: Decimal = Field(gt=0)
-    currency: str = Field(default="AED", min_length=3, max_length=6)
 
 
 class PurchaseOrderOut(BaseModel):

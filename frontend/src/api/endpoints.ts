@@ -214,12 +214,7 @@ export async function getPurchaseOrder(id: string) {
   return data;
 }
 
-export async function createPurchaseOrder(payload: {
-  pr_id: string;
-  vendor_id: string;
-  amount: number;
-  currency: string;
-}) {
+export async function createPurchaseOrder(payload: { pr_id: string; vendor_id: string; amount: number }) {
   const { data } = await apiClient.post<PurchaseOrder>("/api/purchase-orders", payload);
   return data;
 }

@@ -3,6 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { createPurchaseOrder, fetchVendors, listPurchaseRequests } from "../../api/endpoints";
 import { getErrorMessage } from "../../api/client";
+import { formatCurrency } from "../../utils/format";
 
 export function POForm() {
   const navigate = useNavigate();
@@ -12,7 +13,6 @@ export function POForm() {
   const [prId, setPrId] = useState(preselectedPrId);
   const [vendorId, setVendorId] = useState("");
   const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState("AED");
   const [error, setError] = useState("");
 
   const approvedPRsQuery = useQuery({
@@ -32,13 +32,12 @@ export function POForm() {
     if (selectedPR) {
       setVendorId(selectedPR.vendor_id || "");
       setAmount(selectedPR.amount);
-      setCurrency(selectedPR.currency);
     }
   }, [selectedPR?.id]);
 
   const mutation = useMutation({
     mutationFn: () =>
-      createPurchaseOrder({ pr_id: prId, vendor_id: vendorId, amount: Number(amount), currency }),
+      createPurchaseOrder({ pr_id: prId, vendor_id: vendorId, amount: Number(amount) }),
     onSuccess: (po) => navigate(`/purchase-orders/${po.id}`),
     onError: (err) => setError(getErrorMessage(err)),
   });
@@ -111,19 +110,26 @@ export function POForm() {
               type="number"
               required
               min={0.01}
+              max={selectedPR?.amount}
               step="0.01"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
             />
+            {selectedPR && (
+              <p className="text-xs text-slate-400 mt-1">
+                Approved amount: {selectedPR.currency} {formatCurrency(selectedPR.amount)}. You can lower it, not
+                exceed it.
+              </p>
+            )}
           </div>
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Currency</label>
             <input
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              maxLength={6}
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              value={selectedPR?.currency ?? ""}
+              readOnly
+              disabled
+              className="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-500"
             />
           </div>
         </div>

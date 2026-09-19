@@ -77,13 +77,18 @@ def create_purchase_order(
             detail="This purchase request already has an active purchase order",
         )
     assert_vendor_supplies_category(db, payload.vendor_id, pr.category_id)
+    if payload.amount > pr.amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"PO amount cannot exceed the approved amount of {pr.currency} {pr.amount:,.2f}",
+        )
 
     po = PurchaseOrder(
         po_number=next_sequence_number(db, PurchaseOrder, PurchaseOrder.po_number, "PO"),
         pr_id=pr.id,
         vendor_id=payload.vendor_id,
         amount=payload.amount,
-        currency=payload.currency,
+        currency=pr.currency,
         status=POStatus.OPEN,
         created_by_id=current_user.id,
     )
