@@ -197,7 +197,7 @@ export function Dashboard() {
                     ))}
                   </Pie>
                   {total > 0 && (
-                    <Tooltip formatter={(value: number, _name, item) => [value, statusLabel(item.payload.status)]} />
+                    <Tooltip formatter={(value, _name, item) => [value, statusLabel(item.payload.status)]} />
                   )}
                 </PieChart>
               </ResponsiveContainer>

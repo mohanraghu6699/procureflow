@@ -29,13 +29,18 @@ apiClient.interceptors.response.use(
   }
 );
 
+interface ValidationDetail {
+  loc?: (string | number)[];
+  msg: string;
+}
+
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const data = error.response?.data;
     if (data?.detail) {
       if (typeof data.detail === "string") return data.detail;
       if (Array.isArray(data.errors)) {
-        return data.errors.map((e: any) => `${e.loc?.slice(-1)[0]}: ${e.msg}`).join(", ");
+        return (data.errors as ValidationDetail[]).map((e) => `${e.loc?.slice(-1)[0]}: ${e.msg}`).join(", ");
       }
     }
     return error.message;
