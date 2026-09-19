@@ -230,8 +230,8 @@ export async function recordDelivery(
   return data;
 }
 
-export async function listDeliveries(status?: string) {
-  const { data } = await apiClient.get<Delivery[]>("/api/deliveries", { params: { status } });
+export async function listDeliveries(params: { status?: string; page: number; page_size: number }) {
+  const { data } = await apiClient.get<Paginated<Delivery>>("/api/deliveries", { params });
   return data;
 }
 

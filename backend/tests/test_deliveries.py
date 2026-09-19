@@ -94,12 +94,36 @@ def test_delivery_list_is_for_approvers_and_shows_po_numbers(api):
     assert api.c.get("/api/deliveries", headers=api.h("rohan")).status_code == 403
 
     listed = api.c.get("/api/deliveries", headers=api.h("sameer")).json()
-    assert len(listed) == 2
-    assert {d["po_number"] for d in listed} == {po["po_number"]}
+    assert listed["total"] == 2
+    assert {d["po_number"] for d in listed["items"]} == {po["po_number"]}
 
     partial = api.c.get("/api/deliveries", params={"status": "PARTIAL"}, headers=api.h("sameer")).json()
-    assert [d["status"] for d in partial] == ["PARTIAL"]
-    assert api.c.get("/api/deliveries", params={"limit": 0}, headers=api.h("sameer")).status_code == 422
+    assert [d["status"] for d in partial["items"]] == ["PARTIAL"]
+    assert partial["total"] == 1
+
+
+def test_delivery_list_pagination(api):
+    po = api.po_for()
+    for _ in range(5):
+        assert api.deliver(po["id"], "IN_TRANSIT").status_code == 201
+
+    def page(n, size=2, **params):
+        r = api.c.get("/api/deliveries", params={"page": n, "page_size": size, **params}, headers=api.h("sameer"))
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    first, second, third = page(1), page(2), page(3)
+    assert first["total"] == 5 and first["page"] == 1 and first["page_size"] == 2
+    assert [len(p["items"]) for p in (first, second, third)] == [2, 2, 1]
+
+    ids = [d["id"] for p in (first, second, third) for d in p["items"]]
+    assert len(set(ids)) == 5  # no row repeated or skipped across pages
+    assert page(4)["items"] == []  # past the end is empty, not an error
+
+    assert page(1, status="DELIVERED")["total"] == 0
+    for bad in ({"page": 0}, {"page_size": 0}, {"page_size": 101}):
+        r = api.c.get("/api/deliveries", params=bad, headers=api.h("sameer"))
+        assert r.status_code == 422
 
 
 def test_completed_pr_can_no_longer_take_a_new_po(api):
