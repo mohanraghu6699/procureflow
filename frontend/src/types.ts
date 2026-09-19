@@ -89,6 +89,7 @@ export interface PurchaseOrder {
 export interface Delivery {
   id: string;
   po_id: string;
+  po_number?: string | null;
   delivery_date?: string | null;
   status: DeliveryStatus;
   remarks?: string | null;

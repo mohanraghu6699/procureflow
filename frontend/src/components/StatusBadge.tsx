@@ -12,7 +12,7 @@ const STATUS_STYLES: Record<string, string> = {
   PARTIAL: "bg-blue-100 text-blue-700",
 };
 
-function toLabel(status: string) {
+export function statusLabel(status: string) {
   return status
     .split("_")
     .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
@@ -23,7 +23,7 @@ export function StatusBadge({ status }: { status: string }) {
   const cls = STATUS_STYLES[status] || "bg-slate-100 text-slate-600";
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${cls}`}>
-      {toLabel(status)}
+      {statusLabel(status)}
     </span>
   );
 }

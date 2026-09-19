@@ -223,6 +223,7 @@ class PurchaseOrderOut(BaseModel):
 class DeliveryOut(BaseModel):
     id: str
     po_id: str
+    po_number: Optional[str] = None
     delivery_date: Optional[datetime] = None
     status: DeliveryStatus
     remarks: Optional[str] = None

@@ -149,6 +149,7 @@ def get_purchase_order(
         DeliveryOut(
             id=d.id,
             po_id=d.po_id,
+            po_number=po.po_number,
             delivery_date=d.delivery_date,
             status=d.status,
             remarks=d.remarks,
