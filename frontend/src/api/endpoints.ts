@@ -137,6 +137,7 @@ export interface PRListParams {
   category_id?: string;
   search?: string;
   mine?: boolean;
+  awaiting_po?: boolean;
   sort_by?: string;
   sort_dir?: string;
   page?: number;

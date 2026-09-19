@@ -120,6 +120,7 @@ def list_purchase_requests(
     category_id: Optional[str] = None,
     search: Optional[str] = None,
     mine: bool = False,
+    awaiting_po: bool = False,
     sort_by: str = Query(default="created_at", pattern="^(created_at|amount|required_date|pr_number)$"),
     sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
@@ -132,6 +133,8 @@ def list_purchase_requests(
 
     if status_filter is not None:
         query = query.filter(PurchaseRequest.status == status_filter)
+    if awaiting_po:
+        query = query.filter(~PurchaseRequest.purchase_orders.any())
     if department_id:
         query = query.filter(PurchaseRequest.department_id == department_id)
     if category_id:

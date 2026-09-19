@@ -17,7 +17,7 @@ export function POForm() {
 
   const approvedPRsQuery = useQuery({
     queryKey: ["approved-prs-for-po"],
-    queryFn: () => listPurchaseRequests({ status: "APPROVED", page: 1, page_size: 100 }),
+    queryFn: () => listPurchaseRequests({ status: "APPROVED", awaiting_po: true, page: 1, page_size: 100 }),
   });
 
   const selectedPR = approvedPRsQuery.data?.items.find((pr) => pr.id === prId);
