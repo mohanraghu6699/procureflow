@@ -81,11 +81,13 @@ def _assert_can_view(pr: PurchaseRequest, user: User) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed to view this purchase request")
 
 
-def _add_history(db: Session, pr: PurchaseRequest, to_status: PRStatus, user: User, comment: Optional[str]) -> None:
+def _add_history(
+    db: Session, pr: PurchaseRequest, to_status: PRStatus, user: User, comment: Optional[str], initial: bool = False
+) -> None:
     db.add(
         PRStatusHistory(
             pr_id=pr.id,
-            from_status=pr.status,
+            from_status=None if initial else pr.status,
             to_status=to_status,
             changed_by_id=user.id,
             comment=comment,
@@ -120,7 +122,7 @@ def create_purchase_request(
     )
     db.add(pr)
     db.flush()
-    _add_history(db, pr, PRStatus.DRAFT, current_user, "Purchase request created")
+    _add_history(db, pr, PRStatus.DRAFT, current_user, "Purchase request created", initial=True)
     db.commit()
     db.refresh(pr)
     return _to_out(pr)
