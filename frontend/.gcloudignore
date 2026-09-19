@@ -1,0 +1,5 @@
+# What `gcloud builds submit` must NOT upload to Cloud Build.
+node_modules/
+dist/
+.env
+*.log
