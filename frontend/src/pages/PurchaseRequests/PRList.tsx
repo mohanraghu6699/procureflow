@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { fetchCategories, fetchDepartments, listPurchaseRequests } from "../../api/endpoints";
 import { Pagination } from "../../components/Pagination";
-import { StatusBadge } from "../../components/StatusBadge";
+import { StatusBadge, statusLabel } from "../../components/StatusBadge";
 import { useAuth } from "../../context/AuthContext";
 import type { PRStatus } from "../../types";
 import { formatCurrency } from "../../utils/format";
@@ -91,7 +91,7 @@ export function PRList() {
           <option value="">All Statuses</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {statusLabel(s)}
             </option>
           ))}
         </select>

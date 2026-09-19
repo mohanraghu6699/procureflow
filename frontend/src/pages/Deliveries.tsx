@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 import { listDeliveries } from "../api/endpoints";
-import { StatusBadge } from "../components/StatusBadge";
+import { StatusBadge, statusLabel } from "../components/StatusBadge";
 import type { DeliveryStatus } from "../types";
 
 const STATUSES: DeliveryStatus[] = ["IN_TRANSIT", "PARTIAL", "DELIVERED"];
@@ -26,7 +26,7 @@ export function Deliveries() {
           <option value="">All Statuses</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {statusLabel(s)}
             </option>
           ))}
         </select>
@@ -48,7 +48,7 @@ export function Deliveries() {
               <tr key={d.id} className="border-b border-slate-100 last:border-0 hover:bg-brand-50 transition-colors">
                 <td className="px-4 py-3">
                   <Link to={`/purchase-orders/${d.po_id}`} className="text-brand-600 font-medium">
-                    View Order
+                    {d.po_number ?? "View Order"}
                   </Link>
                 </td>
                 <td className="px-4 py-3 text-slate-600">

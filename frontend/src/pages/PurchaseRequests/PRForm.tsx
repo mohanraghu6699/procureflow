@@ -57,6 +57,18 @@ export function PRForm() {
     }
   }, [prQuery.data]);
 
+  const original = prQuery.data;
+  const unchanged =
+    isEdit &&
+    original !== undefined &&
+    departmentId === original.department_id &&
+    description.trim() === original.description.trim() &&
+    categoryId === original.category_id &&
+    Number(amount) === Number(original.amount) &&
+    currency === original.currency &&
+    requiredDate === original.required_date.slice(0, 10) &&
+    vendorId === (original.vendor_id || "");
+
   const mutation = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -223,11 +235,13 @@ export function PRForm() {
         <div className="flex items-center gap-3 pt-2">
           <button
             type="submit"
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || unchanged}
+            title={unchanged ? "Change something to save" : undefined}
             className="bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg px-5 py-2.5 disabled:opacity-60"
           >
             {mutation.isPending ? "Saving..." : isEdit ? "Save Changes" : "Create Draft"}
           </button>
+          {unchanged && <span className="text-xs text-slate-400">Nothing changed yet</span>}
           <button
             type="button"
             onClick={() => navigate(-1)}

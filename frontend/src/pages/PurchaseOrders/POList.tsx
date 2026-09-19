@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { fetchVendors, listPurchaseOrders } from "../../api/endpoints";
 import { Pagination } from "../../components/Pagination";
-import { StatusBadge } from "../../components/StatusBadge";
+import { StatusBadge, statusLabel } from "../../components/StatusBadge";
 import type { POStatus } from "../../types";
 import { formatCurrency, openOrderDue } from "../../utils/format";
 
@@ -15,12 +15,35 @@ export function POList() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [vendorId, setVendorId] = useState("");
+  const [sortBy, setSortBy] = useState("created_at");
+  const [sortDir, setSortDir] = useState("desc");
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
+  function toggleSort(column: string) {
+    if (sortBy === column) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortBy(column);
+      setSortDir("desc");
+    }
+    setPage(1);
+  }
+
+  function sortableHeader(column: string, label: string) {
+    return (
+      <th
+        className="px-4 py-2.5 font-medium cursor-pointer select-none hover:text-slate-600"
+        onClick={() => toggleSort(column)}
+      >
+        {label} {sortBy === column && (sortDir === "asc" ? "↑" : "↓")}
+      </th>
+    );
+  }
+
   const vendorsQuery = useQuery({ queryKey: ["vendors"], queryFn: () => fetchVendors() });
   const poQuery = useQuery({
-    queryKey: ["purchase-orders", { search, status, vendorId, page }],
+    queryKey: ["purchase-orders", { search, status, vendorId, sortBy, sortDir, page }],
     queryFn: () =>
       listPurchaseOrders({
         search: search || undefined,
@@ -28,8 +51,8 @@ export function POList() {
         vendor_id: vendorId || undefined,
         page,
         page_size: pageSize,
-        sort_by: "created_at",
-        sort_dir: "desc",
+        sort_by: sortBy,
+        sort_dir: sortDir,
       }),
   });
 
@@ -61,7 +84,7 @@ export function POList() {
           <option value="">All Statuses</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
-              {s}
+              {statusLabel(s)}
             </option>
           ))}
         </select>
@@ -86,12 +109,12 @@ export function POList() {
         <div className="overflow-x-auto"><table className="w-full min-w-[640px] text-sm">
           <thead>
             <tr className="text-left text-xs text-slate-400 border-b border-slate-100 bg-slate-50">
-              <th className="px-4 py-2.5 font-medium">PO Number</th>
+              {sortableHeader("po_number", "PO Number")}
               <th className="px-4 py-2.5 font-medium">Linked PR</th>
               <th className="px-4 py-2.5 font-medium">Vendor</th>
-              <th className="px-4 py-2.5 font-medium">Amount</th>
-              <th className="px-4 py-2.5 font-medium">Required By</th>
-              <th className="px-4 py-2.5 font-medium">Created</th>
+              {sortableHeader("amount", "Amount")}
+              {sortableHeader("required_date", "Required By")}
+              {sortableHeader("created_at", "Created")}
               <th className="px-4 py-2.5 font-medium">Status</th>
             </tr>
           </thead>

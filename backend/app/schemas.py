@@ -169,6 +169,7 @@ class PurchaseRequestOut(BaseModel):
     vendor_id: Optional[str] = None
     vendor_name: Optional[str] = None
     status: PRStatus
+    revision_required: bool = False
     created_at: UTCDateTime
     updated_at: UTCDateTime
 
@@ -198,7 +199,6 @@ class PurchaseOrderCreate(BaseModel):
     pr_id: str
     vendor_id: str
     amount: Decimal = Field(gt=0)
-    currency: str = Field(default="AED", min_length=3, max_length=6)
 
 
 class PurchaseOrderOut(BaseModel):
@@ -224,6 +224,7 @@ class PurchaseOrderOut(BaseModel):
 class DeliveryOut(BaseModel):
     id: str
     po_id: str
+    po_number: Optional[str] = None
     delivery_date: Optional[datetime] = None
     status: DeliveryStatus
     remarks: Optional[str] = None
@@ -269,6 +270,19 @@ class MonthlyTrendPoint(BaseModel):
     po_count: int
 
 
+class TrendPoint(BaseModel):
+    current: Decimal
+    previous: Decimal
+
+
+class DashboardTrends(BaseModel):
+    prs_created_month: TrendPoint
+    pos_created_month: TrendPoint
+    submitted_week: TrendPoint
+    ordered_week: TrendPoint
+    approved_spend_month: TrendPoint
+
+
 class DashboardSummary(BaseModel):
     total_purchase_requests: int
     pending_approval: int
@@ -276,7 +290,9 @@ class DashboardSummary(BaseModel):
     pending_delivery: int
     total_spend_approved: Decimal
     pr_by_status: list[StatusCount]
+    po_by_status: list[StatusCount]
     monthly_trend: list[MonthlyTrendPoint]
+    trends: DashboardTrends
 
 
 class RecentActivityItem(BaseModel):

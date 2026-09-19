@@ -7,6 +7,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Enum,
+    false,
     ForeignKey,
     Integer,
     Numeric,
@@ -129,6 +130,7 @@ class PurchaseRequest(Base):
     required_date = Column(DateTime, nullable=False)
     vendor_id = Column(String(36), ForeignKey("vendors.id"), nullable=True)
     status = Column(Enum(PRStatus, name="pr_status"), nullable=False, default=PRStatus.DRAFT)
+    revision_required = Column(Boolean, nullable=False, default=False, server_default=false())
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

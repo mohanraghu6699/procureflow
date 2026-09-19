@@ -36,6 +36,7 @@ export function PRDetail() {
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["purchase-request", id] });
     queryClient.invalidateQueries({ queryKey: ["purchase-requests"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-summary"] });
   };
 
   const submitMutation = useMutation({
@@ -52,7 +53,7 @@ export function PRDetail() {
     onError: (err) => setError(getErrorMessage(err)),
   });
   const rejectMutation = useMutation({
-    mutationFn: () => rejectPurchaseRequest(id as string, comment || undefined),
+    mutationFn: () => rejectPurchaseRequest(id as string, comment.trim()),
     onSuccess: () => {
       setComment("");
       invalidate();
@@ -70,6 +71,7 @@ export function PRDetail() {
   }
 
   const pr = prQuery.data;
+  const rejection = [...pr.status_history].reverse().find((h) => h.to_status === "REJECTED");
   const isOwner = pr.requester_id === user?.id;
   const canEdit = (isOwner || user?.role === "ADMIN") && ["DRAFT", "REJECTED"].includes(pr.status);
   const canApproveReject =
@@ -102,7 +104,12 @@ export function PRDetail() {
           {canEdit && (
             <button
               onClick={() => submitMutation.mutate()}
-              disabled={submitMutation.isPending}
+              disabled={submitMutation.isPending || (pr.status === "REJECTED" && pr.revision_required)}
+              title={
+                pr.status === "REJECTED" && pr.revision_required
+                  ? "Edit the request to address the rejection first"
+                  : undefined
+              }
               className="text-sm bg-brand-500 hover:bg-brand-600 text-white rounded-lg px-3 py-2 disabled:opacity-60"
             >
               Submit for Approval
@@ -128,6 +135,20 @@ export function PRDetail() {
       </div>
 
       {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+
+      {pr.status === "REJECTED" && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm">
+          <div className="font-medium text-red-700">
+            Rejected{rejection?.changed_by_name ? ` by ${rejection.changed_by_name}` : ""}
+          </div>
+          {rejection?.comment && <div className="text-red-600 mt-0.5 break-words">{rejection.comment}</div>}
+          {pr.revision_required && (
+            <div className="text-xs text-red-500 mt-1">
+              Edit the request to address this before you can resubmit it.
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5">
@@ -191,7 +212,7 @@ export function PRDetail() {
               <textarea
                 value={comment}
                 onChange={(e) => setComment(e.target.value)}
-                placeholder="Optional comment..."
+                placeholder="Comment (optional to approve, required to reject)"
                 rows={2}
                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
               />
@@ -204,7 +225,14 @@ export function PRDetail() {
                   Approve
                 </button>
                 <button
-                  onClick={() => rejectMutation.mutate()}
+                  onClick={() => {
+                    if (!comment.trim()) {
+                      setError("Add a reason in the comment box before rejecting.");
+                      return;
+                    }
+                    setError("");
+                    rejectMutation.mutate();
+                  }}
                   disabled={rejectMutation.isPending}
                   className="text-sm bg-red-600 hover:bg-red-700 text-white rounded-lg px-4 py-2 disabled:opacity-60"
                 >

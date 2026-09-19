@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from dateutil.relativedelta import relativedelta
@@ -18,9 +18,19 @@ from app.models import (
     User,
     UserRole,
 )
-from app.schemas import DashboardSummary, MonthlyTrendPoint, RecentActivityItem, StatusCount
+from app.schemas import (
+    DashboardSummary,
+    DashboardTrends,
+    MonthlyTrendPoint,
+    RecentActivityItem,
+    StatusCount,
+    TrendPoint,
+)
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+
+# POStatus.DELIVERED is never assigned (delivering completes the PO), so it isn't summarised.
+PO_SUMMARY_STATUSES = [POStatus.OPEN, POStatus.IN_TRANSIT, POStatus.PARTIALLY_DELIVERED, POStatus.COMPLETED]
 
 ACTIVITY_VERB = {
     PRStatus.DRAFT: "created",
@@ -47,9 +57,11 @@ def get_summary(db: Session = Depends(get_db), current_user: User = Depends(get_
         PurchaseOrder.status.in_([POStatus.OPEN, POStatus.IN_TRANSIT, POStatus.PARTIALLY_DELIVERED])
     ).count()
 
+    # Actual PO price once ordered, otherwise the approved PR amount.
     total_spend = (
         pr_query.filter(PurchaseRequest.status.in_([PRStatus.APPROVED, PRStatus.COMPLETED]))
-        .with_entities(func.coalesce(func.sum(PurchaseRequest.amount), 0))
+        .outerjoin(PurchaseOrder, PurchaseOrder.pr_id == PurchaseRequest.id)
+        .with_entities(func.coalesce(func.sum(func.coalesce(PurchaseOrder.amount, PurchaseRequest.amount)), 0))
         .scalar()
     )
 
@@ -62,6 +74,14 @@ def get_summary(db: Session = Depends(get_db), current_user: User = Depends(get_
     for status_value, count in status_rows:
         status_counts[status_value.value] = count
     pr_by_status = [StatusCount(status=k, count=v) for k, v in status_counts.items()]
+
+    po_counts = {s.value: 0 for s in PO_SUMMARY_STATUSES}
+    for status_value, count in (
+        po_query.with_entities(PurchaseOrder.status, func.count()).group_by(PurchaseOrder.status).all()
+    ):
+        if status_value.value in po_counts:
+            po_counts[status_value.value] = count
+    po_by_status = [StatusCount(status=k, count=v) for k, v in po_counts.items()]
 
     today = datetime.utcnow().replace(day=1)
     months = [(today - relativedelta(months=i)) for i in range(8, -1, -1)]
@@ -78,6 +98,65 @@ def get_summary(db: Session = Depends(get_db), current_user: User = Depends(get_
             MonthlyTrendPoint(month=month_start.strftime("%b"), pr_count=pr_count, po_count=po_count)
         )
 
+    now = datetime.utcnow()
+    horizon = now + timedelta(days=1)
+    this_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    last_month = this_month - relativedelta(months=1)
+    this_week = now - timedelta(days=7)
+    last_week = now - timedelta(days=14)
+    is_requester = current_user.role == UserRole.REQUESTER
+
+    def created(query, column, start, end):
+        return query.filter(column >= start, column < end).count()
+
+    def transitions(to_status, start, end):
+        q = db.query(PRStatusHistory).join(PurchaseRequest, PRStatusHistory.pr_id == PurchaseRequest.id)
+        if is_requester:
+            q = q.filter(PurchaseRequest.requester_id == current_user.id)
+        return q.filter(
+            PRStatusHistory.to_status == to_status,
+            PRStatusHistory.changed_at >= start,
+            PRStatusHistory.changed_at < end,
+        ).count()
+
+    def approved_spend(start, end):
+        q = (
+            db.query(func.coalesce(func.sum(func.coalesce(PurchaseOrder.amount, PurchaseRequest.amount)), 0))
+            .select_from(PRStatusHistory)
+            .join(PurchaseRequest, PRStatusHistory.pr_id == PurchaseRequest.id)
+            .outerjoin(PurchaseOrder, PurchaseOrder.pr_id == PurchaseRequest.id)
+        )
+        if is_requester:
+            q = q.filter(PurchaseRequest.requester_id == current_user.id)
+        return q.filter(
+            PRStatusHistory.to_status == PRStatus.APPROVED,
+            PRStatusHistory.changed_at >= start,
+            PRStatusHistory.changed_at < end,
+        ).scalar()
+
+    trends = DashboardTrends(
+        prs_created_month=TrendPoint(
+            current=created(pr_query, PurchaseRequest.created_at, this_month, horizon),
+            previous=created(pr_query, PurchaseRequest.created_at, last_month, this_month),
+        ),
+        pos_created_month=TrendPoint(
+            current=created(po_query, PurchaseOrder.created_at, this_month, horizon),
+            previous=created(po_query, PurchaseOrder.created_at, last_month, this_month),
+        ),
+        submitted_week=TrendPoint(
+            current=transitions(PRStatus.SUBMITTED, this_week, horizon),
+            previous=transitions(PRStatus.SUBMITTED, last_week, this_week),
+        ),
+        ordered_week=TrendPoint(
+            current=created(po_query, PurchaseOrder.created_at, this_week, horizon),
+            previous=created(po_query, PurchaseOrder.created_at, last_week, this_week),
+        ),
+        approved_spend_month=TrendPoint(
+            current=approved_spend(this_month, horizon),
+            previous=approved_spend(last_month, this_month),
+        ),
+    )
+
     return DashboardSummary(
         total_purchase_requests=total_prs,
         pending_approval=pending_approval,
@@ -85,7 +164,9 @@ def get_summary(db: Session = Depends(get_db), current_user: User = Depends(get_
         pending_delivery=pending_delivery,
         total_spend_approved=Decimal(total_spend or 0),
         pr_by_status=pr_by_status,
+        po_by_status=po_by_status,
         monthly_trend=monthly_trend,
+        trends=trends,
     )
 
 

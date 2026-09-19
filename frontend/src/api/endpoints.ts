@@ -137,6 +137,7 @@ export interface PRListParams {
   category_id?: string;
   search?: string;
   mine?: boolean;
+  awaiting_po?: boolean;
   sort_by?: string;
   sort_dir?: string;
   page?: number;
@@ -169,7 +170,7 @@ export async function createPurchaseRequest(payload: PRPayload) {
 }
 
 export async function updatePurchaseRequest(id: string, payload: Partial<PRPayload>) {
-  const { data } = await apiClient.put<PurchaseRequest>(`/api/purchase-requests/${id}`, payload);
+  const { data } = await apiClient.patch<PurchaseRequest>(`/api/purchase-requests/${id}`, payload);
   return data;
 }
 
@@ -214,12 +215,7 @@ export async function getPurchaseOrder(id: string) {
   return data;
 }
 
-export async function createPurchaseOrder(payload: {
-  pr_id: string;
-  vendor_id: string;
-  amount: number;
-  currency: string;
-}) {
+export async function createPurchaseOrder(payload: { pr_id: string; vendor_id: string; amount: number }) {
   const { data } = await apiClient.post<PurchaseOrder>("/api/purchase-orders", payload);
   return data;
 }

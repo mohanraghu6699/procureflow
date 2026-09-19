@@ -141,7 +141,7 @@ Key endpoint groups:
 
 - `POST /api/auth/login`, `GET /api/auth/me`, `POST /api/auth/users` (admin)
 - `GET/POST /api/master-data/{departments,categories,vendors}` (+ `DELETE` to deactivate, `POST …/{id}/reactivate` to restore; `GET …/vendors?category_id=` filters by supplied category, `PUT …/vendors/{id}/categories` sets a vendor's categories)
-- `GET/POST /api/purchase-requests`, `GET/PUT/DELETE /api/purchase-requests/{id}`, plus `/submit`, `/approve`, `/reject` actions
+- `GET/POST /api/purchase-requests`, `GET/PATCH/DELETE /api/purchase-requests/{id}` (PATCH is a partial update; a save with no real change is refused), plus `/submit`, `/approve`, `/reject` actions
 - `GET/POST /api/purchase-orders`, `GET /api/purchase-orders/{id}`
 - `POST /api/purchase-orders/{id}/deliveries`, `GET /api/deliveries`
 - `GET /api/dashboard/summary`, `GET /api/dashboard/recent-activity`

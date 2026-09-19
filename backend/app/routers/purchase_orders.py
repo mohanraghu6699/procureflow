@@ -77,13 +77,18 @@ def create_purchase_order(
             detail="This purchase request already has an active purchase order",
         )
     assert_vendor_supplies_category(db, payload.vendor_id, pr.category_id)
+    if payload.amount > pr.amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"PO amount cannot exceed the approved amount of {pr.currency} {pr.amount:,.2f}",
+        )
 
     po = PurchaseOrder(
         po_number=next_sequence_number(db, PurchaseOrder, PurchaseOrder.po_number, "PO"),
         pr_id=pr.id,
         vendor_id=payload.vendor_id,
         amount=payload.amount,
-        currency=payload.currency,
+        currency=pr.currency,
         status=POStatus.OPEN,
         created_by_id=current_user.id,
     )
@@ -100,7 +105,7 @@ def list_purchase_orders(
     status_filter: Optional[POStatus] = Query(default=None, alias="status"),
     vendor_id: Optional[str] = None,
     search: Optional[str] = None,
-    sort_by: str = Query(default="created_at", pattern="^(created_at|amount|po_number)$"),
+    sort_by: str = Query(default="created_at", pattern="^(created_at|amount|po_number|required_date)$"),
     sort_dir: str = Query(default="desc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=10, ge=1, le=100),
@@ -122,7 +127,13 @@ def list_purchase_orders(
 
     total = query.count()
 
-    sort_column = getattr(PurchaseOrder, sort_by)
+    sort_columns = {
+        "created_at": PurchaseOrder.created_at,
+        "amount": PurchaseOrder.amount,
+        "po_number": PurchaseOrder.po_number,
+        "required_date": PurchaseRequest.required_date,
+    }
+    sort_column = sort_columns[sort_by]
     sort_column = sort_column.desc() if sort_dir == "desc" else sort_column.asc()
     query = query.order_by(sort_column)
 
@@ -144,6 +155,7 @@ def get_purchase_order(
         DeliveryOut(
             id=d.id,
             po_id=d.po_id,
+            po_number=po.po_number,
             delivery_date=d.delivery_date,
             status=d.status,
             remarks=d.remarks,

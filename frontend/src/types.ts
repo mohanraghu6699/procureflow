@@ -51,6 +51,7 @@ export interface PurchaseRequest {
   vendor_id?: string | null;
   vendor_name?: string | null;
   status: PRStatus;
+  revision_required: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -89,6 +90,7 @@ export interface PurchaseOrder {
 export interface Delivery {
   id: string;
   po_id: string;
+  po_number?: string | null;
   delivery_date?: string | null;
   status: DeliveryStatus;
   remarks?: string | null;
@@ -115,7 +117,9 @@ export interface DashboardSummary {
   pending_delivery: number;
   total_spend_approved: string;
   pr_by_status: { status: string; count: number }[];
+  po_by_status: { status: string; count: number }[];
   monthly_trend: { month: string; pr_count: number; po_count: number }[];
+  trends: DashboardTrends;
 }
 
 export interface RecentActivityItem {
@@ -123,4 +127,17 @@ export interface RecentActivityItem {
   type: string;
   message: string;
   timestamp: string;
+}
+
+export interface TrendPoint {
+  current: string;
+  previous: string;
+}
+
+export interface DashboardTrends {
+  prs_created_month: TrendPoint;
+  pos_created_month: TrendPoint;
+  submitted_week: TrendPoint;
+  ordered_week: TrendPoint;
+  approved_spend_month: TrendPoint;
 }

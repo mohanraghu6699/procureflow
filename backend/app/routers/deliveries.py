@@ -32,6 +32,7 @@ def _to_out(delivery: Delivery) -> DeliveryOut:
     return DeliveryOut(
         id=delivery.id,
         po_id=delivery.po_id,
+        po_number=delivery.purchase_order.po_number,
         delivery_date=delivery.delivery_date,
         status=delivery.status,
         remarks=delivery.remarks,
