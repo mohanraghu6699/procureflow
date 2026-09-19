@@ -170,7 +170,7 @@ export async function createPurchaseRequest(payload: PRPayload) {
 }
 
 export async function updatePurchaseRequest(id: string, payload: Partial<PRPayload>) {
-  const { data } = await apiClient.put<PurchaseRequest>(`/api/purchase-requests/${id}`, payload);
+  const { data } = await apiClient.patch<PurchaseRequest>(`/api/purchase-requests/${id}`, payload);
   return data;
 }
 

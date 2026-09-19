@@ -71,6 +71,7 @@ export function PRDetail() {
   }
 
   const pr = prQuery.data;
+  const rejection = [...pr.status_history].reverse().find((h) => h.to_status === "REJECTED");
   const isOwner = pr.requester_id === user?.id;
   const canEdit = (isOwner || user?.role === "ADMIN") && ["DRAFT", "REJECTED"].includes(pr.status);
   const canApproveReject =
@@ -103,7 +104,12 @@ export function PRDetail() {
           {canEdit && (
             <button
               onClick={() => submitMutation.mutate()}
-              disabled={submitMutation.isPending}
+              disabled={submitMutation.isPending || (pr.status === "REJECTED" && pr.revision_required)}
+              title={
+                pr.status === "REJECTED" && pr.revision_required
+                  ? "Edit the request to address the rejection first"
+                  : undefined
+              }
               className="text-sm bg-brand-500 hover:bg-brand-600 text-white rounded-lg px-3 py-2 disabled:opacity-60"
             >
               Submit for Approval
@@ -129,6 +135,20 @@ export function PRDetail() {
       </div>
 
       {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+
+      {pr.status === "REJECTED" && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm">
+          <div className="font-medium text-red-700">
+            Rejected{rejection?.changed_by_name ? ` by ${rejection.changed_by_name}` : ""}
+          </div>
+          {rejection?.comment && <div className="text-red-600 mt-0.5 break-words">{rejection.comment}</div>}
+          {pr.revision_required && (
+            <div className="text-xs text-red-500 mt-1">
+              Edit the request to address this before you can resubmit it.
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 bg-white rounded-xl border border-slate-200 p-5">

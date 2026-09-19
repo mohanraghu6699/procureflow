@@ -51,6 +51,7 @@ export interface PurchaseRequest {
   vendor_id?: string | null;
   vendor_name?: string | null;
   status: PRStatus;
+  revision_required: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -169,6 +169,7 @@ class PurchaseRequestOut(BaseModel):
     vendor_id: Optional[str] = None
     vendor_name: Optional[str] = None
     status: PRStatus
+    revision_required: bool = False
     created_at: UTCDateTime
     updated_at: UTCDateTime
 
