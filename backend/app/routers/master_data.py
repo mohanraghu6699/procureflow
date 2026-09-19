@@ -1,3 +1,4 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -17,6 +18,7 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/api/master-data", tags=["master-data"])
+logger = logging.getLogger("procureflow.master_data")
 
 
 def _resolve_categories(db: Session, category_ids: list[str]) -> list[Category]:
@@ -48,7 +50,7 @@ def list_departments(
 def create_department(
     payload: DepartmentCreate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     existing = db.query(Department).filter(Department.name == payload.name).first()
     if existing is not None:
@@ -62,6 +64,7 @@ def create_department(
     db.add(dept)
     db.commit()
     db.refresh(dept)
+    logger.info("Department %s created by %s", dept.name, admin.email)
     return dept
 
 
@@ -69,20 +72,21 @@ def create_department(
 def deactivate_department(
     department_id: str,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     dept = db.query(Department).filter(Department.id == department_id).first()
     if dept is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found")
     dept.is_active = False
     db.commit()
+    logger.info("Department %s deactivated by %s", dept.name, admin.email)
 
 
 @router.post("/departments/{department_id}/reactivate", response_model=DepartmentOut)
 def reactivate_department(
     department_id: str,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     dept = db.query(Department).filter(Department.id == department_id).first()
     if dept is None:
@@ -90,6 +94,7 @@ def reactivate_department(
     dept.is_active = True
     db.commit()
     db.refresh(dept)
+    logger.info("Department %s reactivated by %s", dept.name, admin.email)
     return dept
 
 
@@ -112,7 +117,7 @@ def list_categories(
 def create_category(
     payload: CategoryCreate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     existing = db.query(Category).filter(Category.name == payload.name).first()
     if existing is not None:
@@ -126,6 +131,7 @@ def create_category(
     db.add(category)
     db.commit()
     db.refresh(category)
+    logger.info("Category %s created by %s", category.name, admin.email)
     return category
 
 
@@ -133,20 +139,21 @@ def create_category(
 def deactivate_category(
     category_id: str,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     category = db.query(Category).filter(Category.id == category_id).first()
     if category is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
     category.is_active = False
     db.commit()
+    logger.info("Category %s deactivated by %s", category.name, admin.email)
 
 
 @router.post("/categories/{category_id}/reactivate", response_model=CategoryOut)
 def reactivate_category(
     category_id: str,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     category = db.query(Category).filter(Category.id == category_id).first()
     if category is None:
@@ -154,6 +161,7 @@ def reactivate_category(
     category.is_active = True
     db.commit()
     db.refresh(category)
+    logger.info("Category %s reactivated by %s", category.name, admin.email)
     return category
 
 
@@ -179,7 +187,7 @@ def list_vendors(
 def create_vendor(
     payload: VendorCreate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     categories = _resolve_categories(db, payload.category_ids)
     vendor = Vendor(**payload.model_dump(exclude={"category_ids"}))
@@ -187,6 +195,7 @@ def create_vendor(
     db.add(vendor)
     db.commit()
     db.refresh(vendor)
+    logger.info("Vendor %s created by %s", vendor.name, admin.email)
     return vendor
 
 
@@ -195,7 +204,7 @@ def set_vendor_categories(
     vendor_id: str,
     payload: VendorCategoriesUpdate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
     if vendor is None:
@@ -203,6 +212,7 @@ def set_vendor_categories(
     vendor.categories = _resolve_categories(db, payload.category_ids)
     db.commit()
     db.refresh(vendor)
+    logger.info("Vendor %s categories set by %s", vendor.name, admin.email)
     return vendor
 
 
@@ -210,20 +220,21 @@ def set_vendor_categories(
 def deactivate_vendor(
     vendor_id: str,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
     if vendor is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor not found")
     vendor.is_active = False
     db.commit()
+    logger.info("Vendor %s deactivated by %s", vendor.name, admin.email)
 
 
 @router.post("/vendors/{vendor_id}/reactivate", response_model=VendorOut)
 def reactivate_vendor(
     vendor_id: str,
     db: Session = Depends(get_db),
-    _admin: User = Depends(require_roles(UserRole.ADMIN)),
+    admin: User = Depends(require_roles(UserRole.ADMIN)),
 ):
     vendor = db.query(Vendor).filter(Vendor.id == vendor_id).first()
     if vendor is None:
@@ -231,4 +242,5 @@ def reactivate_vendor(
     vendor.is_active = True
     db.commit()
     db.refresh(vendor)
+    logger.info("Vendor %s reactivated by %s", vendor.name, admin.email)
     return vendor
