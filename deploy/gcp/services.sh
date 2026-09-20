@@ -90,21 +90,28 @@ prepare_password_sync() {
   [ -n "$any" ] || die "--sync-passwords needs at least one of SEED_ADMIN_PASSWORD, SEED_REQUESTER_PASSWORD, SEED_APPROVER_PASSWORD in the deploy env file."
 }
 
-# Step 2 (after the release, so the image is the one that contains --sync-passwords): the one-off job.
-run_password_sync() {
-  local job="${APP}-sync-passwords" rc=0
-  log "Applying the seed passwords to the existing accounts (one-off Cloud Run job, removed afterwards)"
+# Runs "python <args>" from the API image once, against the live database, as a Cloud Run job that is removed
+# afterwards whether it worked or not. Used by --sync-passwords and --reset-data (after the release, so the image
+# is the one that contains them). run_one_off_job <job name> <what it does> <arguments, "@"-separated>
+run_one_off_job() {
+  local job="$1" what="$2" args="$3" rc=0
+  log "${what} (one-off Cloud Run job, removed afterwards)"
   gcloud run jobs deploy "$job" \
     --image "${IMAGE_BASE}/api:${TAG}" --region "$REGION" \
     --service-account "$RUN_SA" \
     --set-cloudsql-instances "$CONNECTION_NAME" \
     --set-secrets "$(api_secret_mappings)" \
     --set-env-vars "^@^$(api_plain_env)" \
-    --command python --args "^@^-m@app.seed@--sync-passwords" \
+    --command python --args "^@^${args}" \
     --max-retries 0 --task-timeout 300 --quiet
   gcloud run jobs execute "$job" --region "$REGION" --wait --quiet || rc=$?
   gcloud run jobs delete "$job" --region "$REGION" --quiet || true
-  [ "$rc" = "0" ] || die "The password sync failed (the job is already removed; re-run to retry). Its log: gcloud logging read 'resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${job}\"' --limit 30 --freshness 1h"
+  [ "$rc" = "0" ] || die "${what} failed (the job is already removed; re-run to retry). Its log: gcloud logging read 'resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${job}\"' --limit 30 --freshness 1h"
+}
+
+# Step 2 of --sync-passwords.
+run_password_sync() {
+  run_one_off_job "${APP}-sync-passwords" "Applying the seed passwords to the existing accounts" "-m@app.seed@--sync-passwords"
 }
 
 # Step 3: prove it worked, by logging in as one account per role with the password from the env file.
@@ -126,6 +133,36 @@ verify_password_sync() {
     [ "$code" = "200" ] || die "After the sync, ${email} could not log in with ${var} (HTTP ${code})."
     echo "  ${email} logs in with ${var}: OK"
   done
+}
+
+# ---- --reset-data (update.sh) -----------------------------------------------------------------------
+# Clears every purchase request, order, delivery and status-history row for a clean demo start. Accounts, departments,
+# categories and vendors stay. Runs "python -m app.reset_data --yes" as a one-off job, like the password sync.
+run_data_reset() {
+  run_one_off_job "${APP}-reset-data" "Clearing all purchase requests, orders and deliveries" "-m@app.reset_data@--yes"
+}
+
+# Proves it: the admin's dashboard must show no requests and no orders. Needs the admin's password from the env
+# file; without it (or if it no longer works) this says so instead of failing the deploy.
+verify_data_reset() {
+  local password="${SEED_ADMIN_PASSWORD:-}" token summary
+  log "Checking the data was cleared"
+  if [ -z "$password" ]; then
+    echo "  SEED_ADMIN_PASSWORD is not set in the env file, so the result was not checked. Look at the dashboard."
+    return 0
+  fi
+  password="${password//\\/\\\\}"; password="${password//\"/\\\"}"   # escape for the JSON body
+  token="$(curl -s -X POST "${API_URL}/api/auth/login" -H "Content-Type: application/json" \
+    -d "{\"email\":\"admin@procureflow.com\",\"password\":\"${password}\"}" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')"
+  if [ -z "$token" ]; then
+    echo "  Could not sign in as the admin with SEED_ADMIN_PASSWORD, so the result was not checked. Look at the dashboard."
+    return 0
+  fi
+  summary="$(curl -s -H "Authorization: Bearer ${token}" "${API_URL}/api/dashboard/summary")"
+  case "$summary" in
+    *'"total_purchase_requests":0'*'"total_purchase_orders":0'*) echo "  Dashboard shows 0 purchase requests and 0 purchase orders: OK" ;;
+    *) die "The data reset ran, but the dashboard still shows purchase requests or orders: ${summary}" ;;
+  esac
 }
 
 # Builds the web image and rolls out a new revision. Needs API_URL: it is baked into the JavaScript bundle.

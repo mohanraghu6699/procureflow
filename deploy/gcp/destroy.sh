@@ -18,10 +18,12 @@ for service in "$WEB_SERVICE" "$API_SERVICE"; do
   fi
 done
 
-if gcloud run jobs describe "${APP}-sync-passwords" --region "$REGION" >/dev/null 2>&1; then
-  log "Deleting leftover job ${APP}-sync-passwords"
-  gcloud run jobs delete "${APP}-sync-passwords" --region "$REGION" --quiet
-fi
+for job in "${APP}-sync-passwords" "${APP}-reset-data"; do
+  if gcloud run jobs describe "$job" --region "$REGION" >/dev/null 2>&1; then
+    log "Deleting leftover job ${job}"
+    gcloud run jobs delete "$job" --region "$REGION" --quiet
+  fi
+done
 
 if gcloud sql instances describe "$SQL_INSTANCE" >/dev/null 2>&1; then
   log "Deleting Cloud SQL instance ${SQL_INSTANCE}"

@@ -129,6 +129,14 @@ confirm() {
   case "$answer" in y | Y | yes | YES) ;; *) echo "Cancelled."; exit 1 ;; esac
 }
 
+# confirm_reset <what will be deleted>: a destructive action needs the word RESET typed (or CONFIRM_RESET=RESET for a script).
+confirm_reset() {
+  [ "${CONFIRM_RESET:-}" = "RESET" ] && return 0
+  echo "$1"
+  read -r -p "Type RESET to continue: " answer
+  [ "$answer" = "RESET" ] || { echo "Cancelled."; exit 1; }
+}
+
 # retry <attempts> <delay-seconds> <command...> — newly created IAM objects can take a few seconds to be visible.
 retry() {
   local attempts="$1" delay="$2" n=1
