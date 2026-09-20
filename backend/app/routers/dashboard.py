@@ -19,6 +19,7 @@ from app.models import (
     UserRole,
 )
 from app.schemas import (
+    CurrencyTotal,
     DashboardSummary,
     DashboardTrends,
     MonthlyTrendPoint,
@@ -39,6 +40,12 @@ ACTIVITY_VERB = {
     PRStatus.REJECTED: "rejected",
     PRStatus.COMPLETED: "completed",
 }
+
+
+def _amounts_by_currency(query, currency_column, amount_column) -> list[CurrencyTotal]:
+    total = func.sum(amount_column)
+    rows = query.with_entities(currency_column, total).group_by(currency_column).order_by(total.desc()).all()
+    return [CurrencyTotal(currency=currency, amount=Decimal(str(amount))) for currency, amount in rows]
 
 
 @router.get("/summary", response_model=DashboardSummary)
@@ -162,6 +169,8 @@ def get_summary(db: Session = Depends(get_db), current_user: User = Depends(get_
         pending_approval=pending_approval,
         total_purchase_orders=total_pos,
         pending_delivery=pending_delivery,
+        pr_amounts=_amounts_by_currency(pr_query, PurchaseRequest.currency, PurchaseRequest.amount),
+        po_amounts=_amounts_by_currency(po_query, PurchaseOrder.currency, PurchaseOrder.amount),
         total_spend_approved=Decimal(total_spend or 0),
         pr_by_status=pr_by_status,
         po_by_status=po_by_status,
