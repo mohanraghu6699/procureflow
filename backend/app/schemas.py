@@ -216,9 +216,17 @@ class PurchaseOrderOut(BaseModel):
     created_by_name: Optional[str] = None
     created_at: UTCDateTime
     updated_at: UTCDateTime
+    # Present only on a cancelled order.
+    cancel_reason: Optional[str] = None
+    cancelled_by_name: Optional[str] = None
+    cancelled_at: Optional[UTCDateTime] = None
 
     class Config:
         from_attributes = True
+
+
+class PurchaseOrderCancel(BaseModel):
+    reason: Optional[str] = Field(default=None, max_length=500)
 
 
 class DeliveryOut(BaseModel):

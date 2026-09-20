@@ -40,6 +40,7 @@ class POStatus(str, enum.Enum):
     PARTIALLY_DELIVERED = "PARTIALLY_DELIVERED"
     DELIVERED = "DELIVERED"
     COMPLETED = "COMPLETED"
+    CANCELLED = "CANCELLED"
 
 
 class DeliveryStatus(str, enum.Enum):
@@ -173,10 +174,15 @@ class PurchaseOrder(Base):
     created_by_id = Column(String(36), ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    # Set only when the order is cancelled (status CANCELLED): why, by whom and when.
+    cancel_reason = Column(String(500), nullable=True)
+    cancelled_by_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    cancelled_at = Column(DateTime, nullable=True)
 
     purchase_request = relationship("PurchaseRequest", back_populates="purchase_orders")
     vendor = relationship("Vendor", back_populates="purchase_orders")
-    created_by = relationship("User")
+    created_by = relationship("User", foreign_keys=[created_by_id])
+    cancelled_by = relationship("User", foreign_keys=[cancelled_by_id])
     deliveries = relationship("Delivery", back_populates="purchase_order", cascade="all, delete-orphan")
 
 

@@ -79,7 +79,8 @@ export function PRDetail() {
   const canCreatePO =
     (user?.role === "APPROVER" || user?.role === "ADMIN") &&
     pr.status === "APPROVED" &&
-    (poQuery.data?.items.length ?? 0) === 0;
+    // A cancelled order does not count: the PR is waiting for a replacement.
+    (poQuery.data?.items.filter((po) => po.status !== "CANCELLED").length ?? 0) === 0;
 
   return (
     <div className="space-y-4">
@@ -192,7 +193,7 @@ export function PRDetail() {
 
           {poQuery.data && poQuery.data.items.length > 0 && (
             <div className="mt-5 pt-5 border-t border-slate-100">
-              <div className="text-sm font-semibold text-slate-800 mb-2">Linked Purchase Order</div>
+              <div className="text-sm font-semibold text-slate-800 mb-2">Linked Purchase Orders</div>
               {poQuery.data.items.map((po) => (
                 <Link
                   key={po.id}

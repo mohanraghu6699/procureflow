@@ -58,6 +58,7 @@ erDiagram
         string vendor_id FK
         po_status status
         string created_by_id FK
+        string cancelled_by_id FK
     }
     deliveries {
         string id PK
@@ -74,6 +75,7 @@ erDiagram
     vendors |o--o{ purchase_requests : "vendor_id"
     users ||--o{ pr_status_history : "changed_by_id"
     purchase_requests ||--o{ pr_status_history : "pr_id"
+    users |o--o{ purchase_orders : "cancelled_by_id"
     users ||--o{ purchase_orders : "created_by_id"
     purchase_requests ||--o{ purchase_orders : "pr_id"
     vendors ||--o{ purchase_orders : "vendor_id"
@@ -183,7 +185,7 @@ Append-only audit trail: one row per status change, with who changed it, when an
 
 ### `purchase_orders`
 
-The order raised against an approved PR. Keeps its own `amount` (at most the approved amount) and copies the PR's currency.
+The order raised against an approved PR. Keeps its own `amount` (at most the approved amount) and copies the PR's currency. An OPEN order with no deliveries can be cancelled (status CANCELLED, with the reason, who and when); it stays on record and frees the PR for a new order.
 
 | Column | Type | Null | Notes |
 |---|---|---|---|
@@ -197,6 +199,9 @@ The order raised against an approved PR. Keeps its own `amount` (at most the app
 | `created_by_id` | `VARCHAR(36)` | no | foreign key to `users.id` |
 | `created_at` | `TIMESTAMP WITHOUT TIME ZONE` | no |  |
 | `updated_at` | `TIMESTAMP WITHOUT TIME ZONE` | no |  |
+| `cancel_reason` | `VARCHAR(500)` | yes | Why the order was cancelled. Only set when `status` is CANCELLED. |
+| `cancelled_by_id` | `VARCHAR(36)` | yes | foreign key to `users.id`; Who cancelled it. Only set when `status` is CANCELLED. |
+| `cancelled_at` | `TIMESTAMP WITHOUT TIME ZONE` | yes | When it was cancelled (UTC). Only set when `status` is CANCELLED. |
 
 Indexes: `ix_purchase_orders_po_number` on (po_number) (unique).
 
@@ -219,7 +224,7 @@ Append-only delivery updates against a PO. Each update also moves the PO's `stat
 | PostgreSQL type | Values |
 |---|---|
 | `delivery_status` | `PENDING`, `IN_TRANSIT`, `PARTIAL`, `DELIVERED` |
-| `po_status` | `OPEN`, `IN_TRANSIT`, `PARTIALLY_DELIVERED`, `DELIVERED`, `COMPLETED` |
+| `po_status` | `OPEN`, `IN_TRANSIT`, `PARTIALLY_DELIVERED`, `DELIVERED`, `COMPLETED`, `CANCELLED` |
 | `pr_status` | `DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `COMPLETED` |
 | `pr_status_from` | `DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `COMPLETED` |
 | `pr_status_to` | `DRAFT`, `SUBMITTED`, `APPROVED`, `REJECTED`, `COMPLETED` |
@@ -229,7 +234,8 @@ Append-only delivery updates against a PO. Each update also moves the PO's `stat
 
 ## Rules enforced in the application, not the schema
 
-- **One active PO per PR.** The schema allows several POs per PR (`purchase_orders.pr_id` is a plain foreign key); the API refuses a second unless the first is COMPLETED. A partial unique index would enforce it in the database (see the README's future enhancements).
+- **One active PO per PR.** The schema allows several POs per PR (`purchase_orders.pr_id` is a plain foreign key); the API refuses a second while the first is neither COMPLETED nor CANCELLED. A partial unique index would enforce it in the database (see the README's future enhancements).
+- **Cancelling a PO.** Only an OPEN order with no delivery updates can be cancelled, by an approver or admin, with a reason. The row is kept (soft cancel), so orders are never deleted.
 - **Status transitions.** Which status may follow which is enforced by the API, not by database constraints. Every PR change is written to `pr_status_history`.
 - **Vendor must supply the category.** `vendor_categories` records what a vendor supplies; the API checks it when a vendor is chosen on a PR or PO.
 - **No self-approval, PO amount cap, delivery-date rules.** Business rules in the API layer.

@@ -58,6 +58,8 @@ def record_delivery(
     po = db.query(PurchaseOrder).filter(PurchaseOrder.id == po_id).first()
     if po is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Purchase order not found")
+    if po.status == POStatus.CANCELLED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This purchase order is cancelled")
     if po.status == POStatus.COMPLETED:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This purchase order is already completed")
     if payload.status == DeliveryStatus.DELIVERED and payload.delivery_date is None:

@@ -34,6 +34,7 @@ const PO_COLORS: Record<string, string> = {
   IN_TRANSIT: "#2a78d6",
   PARTIALLY_DELIVERED: "#1baf7a",
   COMPLETED: "#4a3aa7",
+  CANCELLED: "#d03b3b",
 };
 
 function formatRelativeTime(iso: string) {

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams } from "react-router-dom";
-import { getPurchaseOrder, recordDelivery } from "../../api/endpoints";
+import { cancelPurchaseOrder, getPurchaseOrder, recordDelivery } from "../../api/endpoints";
 import { getErrorMessage } from "../../api/client";
 import { BackLink } from "../../components/BackLink";
+import { DecisionDialog } from "../../components/DecisionDialog";
 import { StatusBadge } from "../../components/StatusBadge";
 import { useAuth } from "../../context/AuthContext";
 import type { DeliveryStatus } from "../../types";
@@ -21,6 +22,7 @@ export function PODetail() {
   const [deliveryDate, setDeliveryDate] = useState(localDate(new Date()));
   const [remarks, setRemarks] = useState("");
   const [error, setError] = useState("");
+  const [cancelOpen, setCancelOpen] = useState(false);
 
   const poQuery = useQuery({ queryKey: ["purchase-order", id], queryFn: () => getPurchaseOrder(id as string) });
 
@@ -43,15 +45,31 @@ export function PODetail() {
     onError: (err) => setError(getErrorMessage(err)),
   });
 
+  const cancelMutation = useMutation({
+    mutationFn: (reason: string) => cancelPurchaseOrder(id as string, reason),
+    onSuccess: () => {
+      setCancelOpen(false);
+      // The cancelled order frees its PR for a new one, and drops out of the money and pending-delivery figures.
+      for (const key of ["purchase-order", "purchase-orders", "po-for-pr", "purchase-requests", "dashboard-summary", "dashboard-activity"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    },
+  });
+
   if (poQuery.isLoading || !poQuery.data) {
     return <div className="text-sm text-slate-500">Loading...</div>;
   }
 
   const po = poQuery.data;
-  const canUpdateDelivery = (user?.role === "APPROVER" || user?.role === "ADMIN") && po.status !== "COMPLETED";
+  const isApprover = user?.role === "APPROVER" || user?.role === "ADMIN";
+  const canUpdateDelivery = isApprover && po.status !== "COMPLETED" && po.status !== "CANCELLED";
+  // Only an order nothing has happened to yet can be cancelled (the API enforces the same rule).
+  const canCancel = isApprover && po.status === "OPEN" && po.deliveries.length === 0;
   const finalDelivery = [...po.deliveries].reverse().find((d) => d.status === "DELIVERED" && d.delivery_date);
   const requiredBadge =
-    po.status !== "COMPLETED"
+    po.status === "CANCELLED"
+      ? null
+      : po.status !== "COMPLETED"
       ? openOrderDue(po.required_date)
       : finalDelivery?.delivery_date
         ? deliveryTiming(finalDelivery.delivery_date, po.required_date)
@@ -83,10 +101,34 @@ export function PODetail() {
 
       {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
 
+      {po.status === "CANCELLED" && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm">
+          <div className="font-medium text-rose-800">This purchase order was cancelled</div>
+          {po.cancel_reason && <div className="text-rose-700 mt-0.5 break-words">{po.cancel_reason}</div>}
+          <div className="text-xs text-rose-600 mt-1">
+            {po.cancelled_by_name}
+            {po.cancelled_at && ` · ${new Date(po.cancelled_at).toLocaleString()}`}
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
           <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <div className="text-sm font-semibold text-slate-800 mb-4">Order Details</div>
+            <div className="flex items-center justify-between gap-3 mb-4">
+              <div className="text-sm font-semibold text-slate-800">Order Details</div>
+              {canCancel && (
+                <button
+                  onClick={() => {
+                    cancelMutation.reset();
+                    setCancelOpen(true);
+                  }}
+                  className="text-sm text-red-600 border border-red-200 rounded-lg px-3 py-1.5 hover:bg-red-50 transition-colors"
+                >
+                  Cancel order
+                </button>
+              )}
+            </div>
             <dl className="grid grid-cols-1 sm:grid-cols-2 gap-y-4 text-sm">
               <div>
                 <dt className="text-slate-400">Vendor</dt>
@@ -203,6 +245,18 @@ export function PODetail() {
           </div>
         </div>
       </div>
+
+      {cancelOpen && (
+        <DecisionDialog
+          mode="cancel"
+          title={`Cancel ${po.po_number}?`}
+          subtitle={`The order stays on record as cancelled, and ${po.pr_number ?? "its purchase request"} can be given a new purchase order.`}
+          isSubmitting={cancelMutation.isPending}
+          error={cancelMutation.isError ? getErrorMessage(cancelMutation.error) : undefined}
+          onConfirm={(reason) => cancelMutation.mutate(reason)}
+          onCancel={() => setCancelOpen(false)}
+        />
+      )}
     </div>
   );
 }
