@@ -38,8 +38,13 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - name: Run migrations against an empty database
         env:
+          # The app has no built-in defaults, so every setting is given here (throwaway CI values).
           DATABASE_URL: postgresql+psycopg2://procureflow:procureflow@localhost:5432/procureflow_test
           JWT_SECRET_KEY: ci-only-secret
+          JWT_ALGORITHM: HS256
+          ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+          LOG_LEVEL: INFO
+          CORS_ORIGINS: http://localhost:5173
         run: alembic upgrade head && alembic downgrade base
       - name: Run tests
         run: pytest
@@ -50,6 +55,9 @@ jobs:
     defaults:
       run:
         working-directory: frontend
+    env:
+      # No fallback in the code: the build stops without it.
+      VITE_API_BASE_URL: http://localhost:8000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -64,6 +72,21 @@ jobs:
   docker:
     name: Docker Compose smoke test
     runs-on: ubuntu-latest
+    env:
+      # docker-compose.yml takes every value from the environment; these are throwaway values for this CI run only.
+      POSTGRES_USER: procureflow_ci
+      POSTGRES_PASSWORD: ci-db-password
+      POSTGRES_DB: procureflow
+      JWT_SECRET_KEY: ci-only-jwt-secret-key-at-least-32-chars
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: "60"
+      LOG_LEVEL: INFO
+      CORS_ORIGINS: http://localhost:5173
+      VITE_API_BASE_URL: http://localhost:8000
+      DB_HOST_PORT: "5432"
+      BACKEND_HOST_PORT: "8000"
+      FRONTEND_HOST_PORT: "5173"
+      SEED_ADMIN_PASSWORD: ci-smoke-test-pw
     steps:
       - uses: actions/checkout@v4
       - name: Build and start the stack
@@ -76,11 +99,17 @@ jobs:
           done
           echo "API did not become healthy in time"
           exit 1
-      - name: Log in with a seeded account
+      - name: Log in with the seeded admin (password came from SEED_ADMIN_PASSWORD)
         run: |
           curl -sf -X POST http://localhost:8000/api/auth/login \
             -H "Content-Type: application/json" \
-            -d '{"email":"admin@procureflow.com","password":"Admin@123"}' | grep -q access_token
+            -d "{\"email\":\"admin@procureflow.com\",\"password\":\"${SEED_ADMIN_PASSWORD}\"}" | grep -q access_token
+      - name: The old well-known default password no longer works
+        run: |
+          code="$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:8000/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"admin@procureflow.com","password":"Admin@123"}')"
+          test "$code" = "401"
       - name: Frontend is served
         run: curl -sf http://localhost:5173/ | grep -q 'id="root"'
       - name: Container logs (on failure)

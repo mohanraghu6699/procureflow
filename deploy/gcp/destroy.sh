@@ -23,7 +23,9 @@ if gcloud sql instances describe "$SQL_INSTANCE" >/dev/null 2>&1; then
   gcloud sql instances delete "$SQL_INSTANCE" --quiet
 fi
 
-for secret in "$SECRET_DATABASE_URL" "$SECRET_DB_PASSWORD" "$SECRET_JWT"; do
+seed_secrets=()
+for role in $SEED_ROLES; do seed_secrets+=("$(seed_secret_name "$role")"); done
+for secret in "$SECRET_DATABASE_URL" "$SECRET_DB_PASSWORD" "$SECRET_JWT" "${seed_secrets[@]}"; do
   if gcloud secrets describe "$secret" >/dev/null 2>&1; then
     log "Deleting secret ${secret}"
     gcloud secrets delete "$secret" --quiet

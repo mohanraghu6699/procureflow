@@ -24,6 +24,8 @@ case "$TARGET" in
   *) die "Usage: bash deploy/gcp/update.sh [all|api|web]" ;;
 esac
 
+require_vars LOG_LEVEL ACCESS_TOKEN_EXPIRE_MINUTES JWT_ALGORITHM   # the API has no built-in defaults
+
 confirm "build and deploy new code (${TARGET}); no infrastructure is created or deleted"
 
 # Fail early, with a pointer to deploy.sh, if the infrastructure this relies on is not there.

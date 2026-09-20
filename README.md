@@ -100,12 +100,17 @@ technical_assessment/
 > Note: Docker was not available in the original development environment, so `docker-compose.yml` has not been run end-to-end locally — the images build from the same `requirements.txt`/`package.json` used in the manual setup below, which was fully tested. If you hit an issue, the manual setup is the verified fallback.
 
 ```bash
-docker-compose up --build
+copy .env.example .env      # then edit .env (macOS/Linux: cp); every value in it is required
+docker compose up --build
 ```
+
+**All configuration comes from the environment.** `docker-compose.yml` contains no values: it reads them from `.env` next to it (or your shell, which wins over the file). If a required one is missing, `docker compose` stops and names it. `.env.example` lists all of them: the database (`POSTGRES_*`), the backend (`JWT_SECRET_KEY`, `JWT_ALGORITHM`, `ACCESS_TOKEN_EXPIRE_MINUTES`, `LOG_LEVEL`, `CORS_ORIGINS`), the frontend (`VITE_API_BASE_URL`, baked in at build time), the published ports, and the optional seed passwords.
 
 - Backend: http://localhost:8000 (Swagger at http://localhost:8000/docs)
 - Frontend: http://localhost:5173
-- The backend container runs Alembic migrations and seeds master data and the login accounts below automatically on start (seeding is skipped when users already exist).
+- The backend container runs Alembic migrations and seeds master data and the login accounts (see [Login accounts](#login-accounts-seeded)) automatically on start; seeding is skipped when users already exist.
+- **Choosing the login passwords.** Set `SEED_ADMIN_PASSWORD`, `SEED_REQUESTER_PASSWORD` and `SEED_APPROVER_PASSWORD` in `.env`. Any you leave blank get a random password, printed once by `docker compose logs backend`.
+- These are used only when the database is first created. To reseed with different ones: `docker compose down -v` (this deletes the database volume), then `docker compose up --build`.
 
 ### Option B — Manual local setup
 
@@ -127,9 +132,10 @@ venv\Scripts\activate          # Windows
 # source venv/bin/activate     # macOS/Linux
 pip install -r requirements.txt
 
-copy .env.example .env         # then edit DATABASE_URL / JWT_SECRET_KEY as needed
+copy .env.example .env         # then edit it: all six settings are required, the app has no built-in defaults
 alembic upgrade head
-python -m app.seed             # seeds departments, categories, vendors & login accounts (PRs/POs are created via the UI)
+python -m app.seed             # seeds departments, categories, vendors & login accounts (PRs/POs are created via the UI);
+                               # prints the generated passwords once — or set SEED_*_PASSWORD first, see "Login accounts"
 
 uvicorn app.main:app --reload --port 8000
 ```
@@ -139,23 +145,29 @@ uvicorn app.main:app --reload --port 8000
 ```bash
 cd frontend
 npm install
-copy .env.example .env         # defaults to http://localhost:8000
+copy .env.example .env         # required: VITE_API_BASE_URL has no fallback; `npm run dev` and `npm run build` stop without it
 npm run dev
 ```
 
 Open http://localhost:5173.
 
-### Demo accounts (seeded)
+### Login accounts (seeded)
 
-| Role | Email | Password |
-|---|---|---|
-| Admin | admin@procureflow.com | Admin@123 |
-| Requester | rohan.sharma@procureflow.com | Requester@123 |
-| Requester | priya.nair@procureflow.com | Requester@123 |
-| Approver | sameer.khan@procureflow.com | Approver@123 |
-| Approver | amit.patel@procureflow.com | Approver@123 |
+| Role | Email |
+|---|---|
+| Admin | admin@procureflow.com |
+| Requester | rohan.sharma@procureflow.com |
+| Requester | priya.nair@procureflow.com |
+| Approver | sameer.khan@procureflow.com |
+| Approver | amit.patel@procureflow.com |
 
-The login page also has one-click buttons to fill these in.
+**No password is stored in the repository or shown on the login page.** The seed script takes one password per role from the environment variables `SEED_ADMIN_PASSWORD`, `SEED_REQUESTER_PASSWORD` and `SEED_APPROVER_PASSWORD` (at least 8 characters each), set in your shell or in `backend/.env` (a real environment variable wins over the file). Any that is not set gets a random password, which the script prints **once** when it creates the users:
+
+```
+Generated ADMIN password (shown once, note it now): ********
+```
+
+Seeding only happens on an empty database, so changing these variables later does not change existing accounts; use **Change Password** in the profile menu (or an admin creating a new user on the Users page) instead.
 
 ## Deploying to Google Cloud
 
@@ -163,7 +175,7 @@ The login page also has one-click buttons to fill these in.
 
 ```bash
 gcloud auth login                          # once; billing must be enabled on the project
-bash deploy/gcp/deploy.sh                  # PROJECT_ID / REGION default to your gcloud config / us-central1
+bash deploy/gcp/deploy.sh                  # settings come from deploy/gcp/.env (see "Configuration" below)
 bash deploy/gcp/update.sh                  # later: ship new code only (see below)
 bash deploy/gcp/destroy.sh                 # deletes everything it created
 ```
@@ -177,6 +189,8 @@ bash deploy/gcp/update.sh web      # frontend only
 ```
 
 Database migrations run automatically when the new API revision starts (`alembic upgrade head` before the server). If a migration fails the new revision never becomes ready and Cloud Run keeps serving the previous version. `update.sh` refuses to run, and says why, if the infrastructure is missing.
+
+**Configuration.** Deployment values live in an env file, not in the scripts: copy `deploy/gcp/.env.example` to `deploy/gcp/.env` (git-ignored) and edit it. It sets where and what to create (`PROJECT_ID`, `REGION`, `APP`, `SQL_INSTANCE`, `SQL_TIER`, `DB_NAME`, `API_MIN_INSTANCES`), the API's settings (`LOG_LEVEL`, `ACCESS_TOKEN_EXPIRE_MINUTES` and `JWT_ALGORITHM` are **required**, and `deploy.sh`/`update.sh` stop and name any that are missing; `CORS_EXTRA_ORIGINS` is optional), and the secrets (`DB_PASSWORD` for the Cloud SQL user `DB_USER`, which is fixed to the built-in `postgres`; `JWT_SECRET_KEY`, `SEED_ADMIN_PASSWORD`, `SEED_REQUESTER_PASSWORD`, `SEED_APPROVER_PASSWORD`), which go to Secret Manager rather than into the service configuration. A variable set in your shell wins over the file, and for the few optional values a blank falls back to a script default (`PROJECT_ID` to your `gcloud config`; the JWT key and seed passwords to randomly generated values). The database URL and the API's `CORS_ORIGINS` are computed, since they only exist once the resources do, and the web app gets its API address (`VITE_API_BASE_URL`) from the build, so it needs no `.env` in the cloud.
 
 Run them from **Git Bash** or Cloud Shell. On Windows do not use the `bash` that PowerShell finds — that is WSL, which does not have your `gcloud` login (the script detects this and says so). Images are built by Cloud Build, so Docker is not needed locally.
 
@@ -194,9 +208,11 @@ The script is re-runnable (existing resources are reused, services are redeploye
 Things to know:
 
 - **Cost:** Cloud SQL bills for as long as the instance exists (roughly $8–12/month at this size); Cloud Run and the rest fit in free tiers at demo traffic. Run `destroy.sh` when you are done.
-- **Public demo:** the URL is open to the internet and the seeded accounts have the well-known passwords above. It contains only synthetic data; change the passwords (Change password in the UI) if you leave it up.
-- **Trade-offs for a demo:** the app connects as the built-in `postgres` user (a dedicated least-privilege user would be the hardening step), the API is limited to one instance so concurrent start-up migrations can't race, and instances scale to zero, so the first request after idle is slow.
-- `deploy.sh` has been run end to end against a real GCP project: API and web deployed, and the smoke test (health, seeded admin login, frontend) passed. It only deletes resources named `procureflow-*` that it created itself.
+- **Public demo:** the URL is open to the internet, so hand the login passwords only to the people who should test it. It contains only synthetic data. On a first deploy the seed generates the passwords and `deploy.sh` prints them once; they also appear in the API's log (`gcloud run services logs read procureflow-api --region us-central1`).
+- **Cold starts:** instances scale to zero, so the first request after a quiet period waits ~10–15 seconds while the API starts (the login page says so if sign-in takes more than 3 seconds). `--cpu-boost` shortens it; `API_MIN_INSTANCES=1 bash deploy/gcp/update.sh api` keeps one instance warm for about $10/month, and setting it back to 0 stops that.
+- **Database password changes:** `deploy.sh` applies a changed `DB_PASSWORD` to Cloud SQL and Secret Manager after the image is built and just before the API is released, so the running API is without valid credentials for seconds and a failed build changes nothing. `update.sh` never touches them.
+- **Trade-offs for a demo:** the app connects as the built-in `postgres` user (a dedicated least-privilege user would be the hardening step) and the API is limited to one instance so concurrent start-up migrations can't race.
+- `deploy.sh` has been run end to end against a real GCP project: API and web deployed, and the smoke test (health, database reachable, frontend) passed. It only deletes resources named `procureflow-*` that it created itself.
 
 ## Running the tests
 
@@ -223,7 +239,7 @@ Note: the tests **drop and recreate all tables** in whatever `TEST_DATABASE_URL`
 
 ## Logging
 
-The backend logs to stdout, one line per event, with the level set by `LOG_LEVEL` (default `INFO`):
+The backend logs to stdout, one line per event, with the level set by `LOG_LEVEL`:
 
 ```
 2026-09-19 17:11:05,308 INFO    procureflow.purchase_requests: PR-2026-0001 approved by sameer.khan@procureflow.com
@@ -246,7 +262,7 @@ Key endpoint groups:
 - `GET/POST /api/purchase-requests`, `GET/PATCH/DELETE /api/purchase-requests/{id}` (PATCH is a partial update; a save with no real change is refused), plus `/submit`, `/approve`, `/reject` actions
 - `GET/POST /api/purchase-orders`, `GET /api/purchase-orders/{id}`
 - `POST /api/purchase-orders/{id}/deliveries`, `GET /api/deliveries`
-- `GET /api/dashboard/summary` (counts, PR and PO status breakdowns, monthly trend, period-over-period trends), `GET /api/dashboard/recent-activity`
+- `GET /api/dashboard/summary` (counts, requested and ordered amounts per currency, PR and PO status breakdowns, monthly trend, period-over-period trends), `GET /api/dashboard/recent-activity`
 - `GET /api/health`
 
 All endpoints (except `/api/health` and `/api/auth/login`) require a `Authorization: Bearer <token>` header. List endpoints support `search`, relevant filters, `sort_by`/`sort_dir`, and `page`/`page_size` pagination (PRs: `status`, `department_id`, `category_id`, `mine`, `awaiting_po`; POs: `status`, `vendor_id`, sortable by number, amount, required date or created date; deliveries: `status`, newest first). All paginated lists return `{items, total, page, page_size}`.
@@ -255,6 +271,7 @@ Errors use a consistent shape: `{"detail": "<message>"}` for business-rule failu
 
 ## Key Technical Decisions
 
+- **Configuration comes from the environment only.** No setting has a default in the code: the backend's `Settings` fields are all required (a missing one stops start-up with the variable's name, never its value), the frontend has no fallback API address (`vite.config.ts` refuses to start or build without `VITE_API_BASE_URL`), `docker-compose.yml` holds no values, and the cloud deploy scripts read `deploy/gcp/.env`. Locally the values live in git-ignored `.env` files; CI and the tests supply their own throwaway values. A wrong or forgotten value therefore fails loudly instead of quietly running on a guess.
 - **JWT auth over sessions** — stateless, simple to reason about for a short-lived assessment, `Authorization: Bearer` header checked via a FastAPI dependency (`get_current_user` / `require_roles`).
 - **Status history as an append-only side table** rather than only a `status` column — needed for the "maintain basic status history" requirement and gives a real audit trail instead of just a current-state field.
 - **PR/PO numbers** are generated server-side as `PR-<year>-<sequence>` / `PO-<year>-<sequence>`, scoped per year, matching the format used in the provided dashboard mockup. The next number is the highest existing sequence + 1 (not a row count, so deleting a draft can't cause a duplicate), and on PostgreSQL a transaction-scoped advisory lock serialises concurrent creations. The 4-digit padding is cosmetic: after 9999 numbers keep incrementing, they just no longer sort correctly as text.
