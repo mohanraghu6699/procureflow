@@ -18,6 +18,11 @@ for service in "$WEB_SERVICE" "$API_SERVICE"; do
   fi
 done
 
+if gcloud run jobs describe "${APP}-sync-passwords" --region "$REGION" >/dev/null 2>&1; then
+  log "Deleting leftover job ${APP}-sync-passwords"
+  gcloud run jobs delete "${APP}-sync-passwords" --region "$REGION" --quiet
+fi
+
 if gcloud sql instances describe "$SQL_INSTANCE" >/dev/null 2>&1; then
   log "Deleting Cloud SQL instance ${SQL_INSTANCE}"
   gcloud sql instances delete "$SQL_INSTANCE" --quiet

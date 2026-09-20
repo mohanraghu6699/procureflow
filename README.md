@@ -167,7 +167,7 @@ Open http://localhost:5173.
 Generated ADMIN password (shown once, note it now): ********
 ```
 
-Seeding only happens on an empty database, so changing these variables later does not change existing accounts; use **Change Password** in the profile menu (or an admin creating a new user on the Users page) instead.
+Seeding only happens on an empty database, so changing these variables later does not, by itself, change existing accounts. Either use **Change Password** in the profile menu, or make the accounts match the variables with `python -m app.seed --sync-passwords` (run from `backend/`; it updates only the five seeded accounts, only for roles that have a variable set, creates nothing and is safe to repeat). For the cloud deployment the equivalent is `bash deploy/gcp/update.sh --sync-passwords` (see below).
 
 ## Deploying to Google Cloud
 
@@ -210,6 +210,7 @@ Things to know:
 - **Cost:** Cloud SQL bills for as long as the instance exists (roughly $8–12/month at this size); Cloud Run and the rest fit in free tiers at demo traffic. Run `destroy.sh` when you are done.
 - **Public demo:** the URL is open to the internet, so hand the login passwords only to the people who should test it. It contains only synthetic data. On a first deploy the seed generates the passwords and `deploy.sh` prints them once; they also appear in the API's log (`gcloud run services logs read procureflow-api --region us-central1`).
 - **Cold starts:** instances scale to zero, so the first request after a quiet period waits ~10–15 seconds while the API starts (the login page says so if sign-in takes more than 3 seconds). `--cpu-boost` shortens it; `API_MIN_INSTANCES=1 bash deploy/gcp/update.sh api` keeps one instance warm for about $10/month, and setting it back to 0 stops that.
+- **Changing the login passwords of an existing deployment:** edit the `SEED_*_PASSWORD` values in `deploy/gcp/.env`, then run `bash deploy/gcp/update.sh --sync-passwords` (with `all`, the default, or `api`; not `web`). It stores the values in Secret Manager, releases the new API, runs a one-off Cloud Run job that executes `python -m app.seed --sync-passwords` against the live database (the job is removed afterwards), and finally logs in as one account per role to prove the new passwords work. Only the five seeded accounts are touched, only for roles with a value set; other users, and roles left blank, are never changed. Without the flag `update.sh` never touches passwords.
 - **Database password changes:** `deploy.sh` applies a changed `DB_PASSWORD` to Cloud SQL and Secret Manager after the image is built and just before the API is released, so the running API is without valid credentials for seconds and a failed build changes nothing. `update.sh` never touches them.
 - **Trade-offs for a demo:** the app connects as the built-in `postgres` user (a dedicated least-privilege user would be the hardening step) and the API is limited to one instance so concurrent start-up migrations can't race.
 - `deploy.sh` has been run end to end against a real GCP project: API and web deployed, and the smoke test (health, database reachable, frontend) passed. It only deletes resources named `procureflow-*` that it created itself.

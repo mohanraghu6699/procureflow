@@ -9,16 +9,25 @@ either in the real environment or in backend/.env. Any that is not set gets a ra
 when the users are created.
 
 Run with: venv\\Scripts\\python -m app.seed
+
+Seeding only happens on an EMPTY database, so changing those variables later does not change accounts that
+already exist. To make the existing seeded accounts match the variables, run:
+
+    python -m app.seed --sync-passwords
+
+It sets each seeded account's password to the one for its role, for the roles that have a variable set (nothing
+is generated, no account is created, and other users are never touched). It is safe to repeat.
 """
 import os
 import secrets
+import sys
 from pathlib import Path
 from typing import Mapping
 
 from dotenv import load_dotenv
 from sqlalchemy.orm import Session
 
-from app.auth import hash_password
+from app.auth import hash_password, verify_password
 from app.database import Base, SessionLocal, engine
 from app.models import Category, Department, User, UserRole, Vendor
 
@@ -112,12 +121,71 @@ def seed_database(db: Session, passwords: Mapping[UserRole, str]) -> bool:
     return True
 
 
+def explicit_passwords(env: Mapping[str, str] = os.environ) -> dict[UserRole, str]:
+    """Only the roles that have a password set in the environment. Nothing is generated."""
+    passwords: dict[UserRole, str] = {}
+    for role, variable in PASSWORD_ENV.items():
+        value = (env.get(variable) or "").strip()
+        if not value:
+            continue
+        if len(value) < MIN_PASSWORD_LENGTH:
+            raise ValueError(f"{variable} must be at least {MIN_PASSWORD_LENGTH} characters")
+        passwords[role] = value
+    return passwords
+
+
+def sync_passwords(db: Session, passwords: Mapping[UserRole, str]) -> tuple[list[str], list[str]]:
+    """Set each existing seeded account's password to the one for its role.
+
+    Only the accounts in ACCOUNTS whose role has a password are considered; nothing is created and no other user
+    is touched. Returns (emails updated, emails that already had the right password).
+    """
+    role_by_email = {email: role for _name, email, role, _department in ACCOUNTS}
+    updated: list[str] = []
+    current: list[str] = []
+    for user in db.query(User).filter(User.email.in_(list(role_by_email))).order_by(User.email).all():
+        password = passwords.get(role_by_email[user.email])
+        if password is None:
+            continue
+        if verify_password(password, user.password_hash):
+            current.append(user.email)
+        else:
+            user.password_hash = hash_password(password)
+            updated.append(user.email)
+    db.commit()
+    return updated, current
+
+
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"  # backend/.env
 
 
-def main(env_file: Path = ENV_FILE) -> None:
+def sync_main() -> None:
+    passwords = explicit_passwords()
+    if not passwords:
+        raise SystemExit("Nothing to sync: set at least one of " + ", ".join(PASSWORD_ENV.values()) + ".")
+    db = SessionLocal()
+    try:
+        updated, current = sync_passwords(db, passwords)
+    finally:
+        db.close()
+    print(f"Passwords synced from the environment: {len(updated)} updated, {len(current)} already current.")
+    for email in updated:
+        print(f"  updated  {email}")
+    unset = [PASSWORD_ENV[role] for role in PASSWORD_ENV if role not in passwords]
+    if unset:
+        print("Left alone (not set): " + ", ".join(unset))
+
+
+def main(env_file: Path = ENV_FILE, argv: list[str] | None = None) -> None:
+    args = sys.argv[1:] if argv is None else argv
+    unknown = [a for a in args if a != "--sync-passwords"]
+    if unknown:
+        raise SystemExit(f"Unknown argument(s): {' '.join(unknown)}. The only option is --sync-passwords.")
     # Values from backend/.env are picked up too; a variable already set in the real environment wins.
     load_dotenv(env_file)
+    if "--sync-passwords" in args:
+        sync_main()
+        return
     passwords, generated = resolve_passwords()
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()

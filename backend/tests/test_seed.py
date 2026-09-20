@@ -104,7 +104,7 @@ def test_main_reads_passwords_from_an_env_file(app_db, tmp_path, monkeypatch, ca
     for variable in seed.PASSWORD_ENV.values():
         monkeypatch.delenv(variable, raising=False)  # start with none set in the real environment
     try:
-        seed.main(env_file)
+        seed.main(env_file, [])
     finally:
         os.environ.pop("SEED_ADMIN_PASSWORD", None)  # load_dotenv put it into the real environment
 
@@ -126,7 +126,7 @@ def test_a_real_environment_variable_beats_the_env_file(app_db, tmp_path, monkey
     env_file.write_text("SEED_ADMIN_PASSWORD=from-the-file\n", encoding="utf-8")
     monkeypatch.setenv("SEED_ADMIN_PASSWORD", "from-the-shell-1")
     try:
-        seed.main(env_file)
+        seed.main(env_file, [])
     finally:
         os.environ.pop("SEED_ADMIN_PASSWORD", None)
 
@@ -135,3 +135,119 @@ def test_a_real_environment_variable_beats_the_env_file(app_db, tmp_path, monkey
         admin = session.query(User).filter(User.email == "admin@procureflow.com").one()
         assert verify_password("from-the-shell-1", admin.password_hash)
         assert not verify_password("from-the-file", admin.password_hash)
+
+
+# ---------- --sync-passwords ----------
+
+
+def test_explicit_passwords_only_include_roles_that_are_set():
+    from app.seed import explicit_passwords
+
+    assert explicit_passwords({"SEED_ADMIN_PASSWORD": "admin-pass-1", "SEED_APPROVER_PASSWORD": "  "}) == {
+        UserRole.ADMIN: "admin-pass-1"
+    }
+    assert explicit_passwords({}) == {}  # nothing is generated
+    with pytest.raises(ValueError, match="SEED_REQUESTER_PASSWORD"):
+        explicit_passwords({"SEED_REQUESTER_PASSWORD": "short"})
+
+
+def test_sync_updates_existing_accounts_for_the_roles_that_have_a_password(db):
+    from app.seed import sync_passwords
+
+    seed_database(db, resolve_passwords(ENV)[0])
+    updated, current = sync_passwords(db, {UserRole.ADMIN: "brand-new-admin-1"})
+
+    assert updated == ["admin@procureflow.com"] and current == []
+    users = {u.email: u for u in db.query(User).all()}
+    assert verify_password("brand-new-admin-1", users["admin@procureflow.com"].password_hash)
+    assert not verify_password("admin-pass-1", users["admin@procureflow.com"].password_hash)
+    # roles without a value are left exactly as they were
+    assert verify_password("requester-pass-1", users["rohan.sharma@procureflow.com"].password_hash)
+    assert verify_password("approver-pass-1", users["sameer.khan@procureflow.com"].password_hash)
+
+
+def test_sync_covers_every_account_of_a_role_and_is_safe_to_repeat(db):
+    from app.seed import sync_passwords
+
+    seed_database(db, resolve_passwords(ENV)[0])
+    wanted = {UserRole.REQUESTER: "new-requester-9", UserRole.APPROVER: "new-approver-9"}
+
+    updated, current = sync_passwords(db, wanted)
+    assert sorted(updated) == [
+        "amit.patel@procureflow.com",
+        "priya.nair@procureflow.com",
+        "rohan.sharma@procureflow.com",
+        "sameer.khan@procureflow.com",
+    ]
+    assert current == []
+
+    again_updated, again_current = sync_passwords(db, wanted)  # nothing to do the second time
+    assert again_updated == [] and len(again_current) == 4
+
+
+def test_sync_creates_nothing_and_never_touches_other_users(db):
+    from app.models import UserRole as Role
+    from app.seed import sync_passwords
+
+    assert sync_passwords(db, {Role.ADMIN: "whatever-pass-1"}) == ([], [])  # empty database: still empty
+    assert db.query(User).count() == 0
+
+    seed_database(db, resolve_passwords(ENV)[0])
+    outsider = User(name="Outsider", email="outsider@example.com", password_hash="untouched-hash", role=Role.REQUESTER)
+    db.add(outsider)
+    db.commit()
+
+    sync_passwords(db, {Role.REQUESTER: "new-requester-9"})
+    assert db.query(User).filter(User.email == "outsider@example.com").one().password_hash == "untouched-hash"
+    assert db.query(User).count() == len(ACCOUNTS) + 1
+
+
+def test_synced_password_works_through_the_api_and_the_old_one_stops(client, db):
+    from app.seed import sync_passwords
+
+    seed_database(db, resolve_passwords(ENV)[0])
+    sync_passwords(db, {UserRole.ADMIN: "synced-admin-pass"})
+    login = lambda pw: client.post("/api/auth/login", json={"email": "admin@procureflow.com", "password": pw}).status_code
+    assert login("synced-admin-pass") == 200
+    assert login("admin-pass-1") == 401
+
+
+def test_main_sync_reads_the_env_file_and_reports_without_printing_passwords(app_db, tmp_path, monkeypatch, capsys):
+    import os
+
+    from app import seed
+    from app.database import SessionLocal
+
+    with SessionLocal() as session:
+        seed.seed_database(session, resolve_passwords(ENV)[0])
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("SEED_ADMIN_PASSWORD=from-file-sync-1\n", encoding="utf-8")
+    for variable in seed.PASSWORD_ENV.values():
+        monkeypatch.delenv(variable, raising=False)
+    try:
+        seed.main(env_file, ["--sync-passwords"])
+    finally:
+        os.environ.pop("SEED_ADMIN_PASSWORD", None)
+
+    out = capsys.readouterr().out
+    assert "1 updated, 0 already current" in out
+    assert "admin@procureflow.com" in out
+    assert "SEED_REQUESTER_PASSWORD" in out and "SEED_APPROVER_PASSWORD" in out  # named as left alone
+    assert "from-file-sync-1" not in out
+    with SessionLocal() as session:
+        admin = session.query(User).filter(User.email == "admin@procureflow.com").one()
+        assert verify_password("from-file-sync-1", admin.password_hash)
+
+
+def test_main_sync_needs_at_least_one_password_and_rejects_unknown_options(app_db, tmp_path, monkeypatch):
+    from app import seed
+
+    for variable in seed.PASSWORD_ENV.values():
+        monkeypatch.delenv(variable, raising=False)
+    empty = tmp_path / ".env"
+    empty.write_text("", encoding="utf-8")
+    with pytest.raises(SystemExit, match="Nothing to sync"):
+        seed.main(empty, ["--sync-passwords"])
+    with pytest.raises(SystemExit, match="Unknown argument"):
+        seed.main(empty, ["--reset-everything"])

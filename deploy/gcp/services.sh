@@ -67,6 +67,67 @@ release_api() {
   API_URL="$(service_url "$API_SERVICE")"
 }
 
+# ---- --sync-passwords (update.sh) -------------------------------------------------------------------
+# The seed only creates accounts in an EMPTY database, so passwords in the env file never reach accounts that
+# already exist. This makes them do so on request: the values go to Secret Manager, then a one-off Cloud Run job
+# runs the API image's "python -m app.seed --sync-passwords" against the live database, then the job is removed.
+
+# Step 1 (before the API is released): store the SEED_<ROLE>_PASSWORD values and let the API's identity read them.
+prepare_password_sync() {
+  local role var value name any=""
+  log "Storing the seed passwords from the env file in Secret Manager"
+  for role in $SEED_ROLES; do
+    var="SEED_${role}_PASSWORD"
+    value="${!var:-}"
+    [ -n "$value" ] || continue
+    [ "${#value}" -ge 8 ] || die "${var} must be at least 8 characters."
+    name="$(seed_secret_name "$role")"
+    put_secret "$name" "$value"
+    retry 6 10 gcloud secrets add-iam-policy-binding "$name" \
+      --member "serviceAccount:${RUN_SA}" --role roles/secretmanager.secretAccessor --quiet >/dev/null
+    any=1
+  done
+  [ -n "$any" ] || die "--sync-passwords needs at least one of SEED_ADMIN_PASSWORD, SEED_REQUESTER_PASSWORD, SEED_APPROVER_PASSWORD in the deploy env file."
+}
+
+# Step 2 (after the release, so the image is the one that contains --sync-passwords): the one-off job.
+run_password_sync() {
+  local job="${APP}-sync-passwords" rc=0
+  log "Applying the seed passwords to the existing accounts (one-off Cloud Run job, removed afterwards)"
+  gcloud run jobs deploy "$job" \
+    --image "${IMAGE_BASE}/api:${TAG}" --region "$REGION" \
+    --service-account "$RUN_SA" \
+    --set-cloudsql-instances "$CONNECTION_NAME" \
+    --set-secrets "$(api_secret_mappings)" \
+    --set-env-vars "^@^$(api_plain_env)" \
+    --command python --args "^@^-m@app.seed@--sync-passwords" \
+    --max-retries 0 --task-timeout 300 --quiet
+  gcloud run jobs execute "$job" --region "$REGION" --wait --quiet || rc=$?
+  gcloud run jobs delete "$job" --region "$REGION" --quiet || true
+  [ "$rc" = "0" ] || die "The password sync failed (the job is already removed; re-run to retry). Its log: gcloud logging read 'resource.type=\"cloud_run_job\" AND resource.labels.job_name=\"${job}\"' --limit 30 --freshness 1h"
+}
+
+# Step 3: prove it worked, by logging in as one account per role with the password from the env file.
+verify_password_sync() {
+  local role var value email code body
+  log "Checking the new passwords"
+  for role in $SEED_ROLES; do
+    var="SEED_${role}_PASSWORD"
+    value="${!var:-}"
+    [ -n "$value" ] || continue
+    case "$role" in
+      ADMIN) email="admin@procureflow.com" ;;
+      REQUESTER) email="rohan.sharma@procureflow.com" ;;
+      APPROVER) email="sameer.khan@procureflow.com" ;;
+    esac
+    value="${value//\\/\\\\}"; value="${value//\"/\\\"}"   # escape for the JSON body
+    body="{\"email\":\"${email}\",\"password\":\"${value}\"}"
+    code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "${API_URL}/api/auth/login" -H "Content-Type: application/json" -d "$body")"
+    [ "$code" = "200" ] || die "After the sync, ${email} could not log in with ${var} (HTTP ${code})."
+    echo "  ${email} logs in with ${var}: OK"
+  done
+}
+
 # Builds the web image and rolls out a new revision. Needs API_URL: it is baked into the JavaScript bundle.
 deploy_web() {
   log "Building and deploying the web app (API URL ${API_URL} is baked into the bundle)"

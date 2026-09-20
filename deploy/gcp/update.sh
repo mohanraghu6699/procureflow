@@ -6,6 +6,8 @@
 #   bash deploy/gcp/update.sh          # API + web (default)
 #   bash deploy/gcp/update.sh api      # backend only (includes its database migrations)
 #   bash deploy/gcp/update.sh web      # frontend only
+#   bash deploy/gcp/update.sh --sync-passwords   # also apply the SEED_*_PASSWORD values from deploy/gcp/.env to the
+#                                                # existing seeded accounts (combine with api or all; not with web)
 #
 # Database migrations run automatically when the new API revision starts. If one fails, the revision never
 # becomes ready and Cloud Run keeps serving the previous version, so a bad migration does not take the app down.
@@ -18,15 +20,24 @@ source "$HERE/config.sh"
 # shellcheck source=services.sh
 source "$HERE/services.sh"
 
-TARGET="${1:-all}"
-case "$TARGET" in
-  all | api | web) ;;
-  *) die "Usage: bash deploy/gcp/update.sh [all|api|web]" ;;
-esac
+TARGET="all"
+SYNC=""
+for arg in "$@"; do
+  case "$arg" in
+    all | api | web) TARGET="$arg" ;;
+    --sync-passwords) SYNC=1 ;;
+    *) die "Usage: bash deploy/gcp/update.sh [all|api|web] [--sync-passwords]" ;;
+  esac
+done
+[ -z "$SYNC" ] || [ "$TARGET" != "web" ] || die "--sync-passwords runs the API image, so use it with 'all' (the default) or 'api', not 'web'."
 
 require_vars LOG_LEVEL ACCESS_TOKEN_EXPIRE_MINUTES JWT_ALGORITHM   # the API has no built-in defaults
 
-confirm "build and deploy new code (${TARGET}); no infrastructure is created or deleted"
+if [ -n "$SYNC" ]; then
+  confirm "build and deploy new code (${TARGET}) and SET the seeded accounts' passwords from ${ENV_FILE##*/}; no infrastructure is created or deleted"
+else
+  confirm "build and deploy new code (${TARGET}); no infrastructure is created or deleted"
+fi
 
 # Fail early, with a pointer to deploy.sh, if the infrastructure this relies on is not there.
 missing=0
@@ -57,6 +68,8 @@ PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(project
 CONNECTION_NAME="$(gcloud sql instances describe "$SQL_INSTANCE" --format='value(connectionName)')"
 BUILD_SA_PATH="projects/${PROJECT_ID}/serviceAccounts/${BUILD_SA}"
 
+[ -z "$SYNC" ] || prepare_password_sync
+
 case "$TARGET" in
   api)
     deploy_api
@@ -72,7 +85,10 @@ case "$TARGET" in
     ;;
 esac
 
+[ -z "$SYNC" ] || run_password_sync
+
 # Idempotent: makes sure the API still trusts the web app's URL.
 [ -z "${WEB_URL:-}" ] || allow_cors
 smoke_test
+[ -z "$SYNC" ] || verify_password_sync
 print_summary
