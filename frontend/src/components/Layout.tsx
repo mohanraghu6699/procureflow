@@ -19,7 +19,9 @@ const NAV_ITEMS = [
 const COLLAPSE_KEY = "sidebar-collapsed";
 
 export function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
+  // An admin-set password must be replaced before the app can be used (the API refuses everything else meanwhile).
+  const mustChangePassword = Boolean(user?.must_change_password);
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef<HTMLDivElement>(null);
@@ -50,7 +52,7 @@ export function Layout() {
   const summaryQuery = useQuery({
     queryKey: ["dashboard-summary"],
     queryFn: fetchDashboardSummary,
-    enabled: canApprove,
+    enabled: canApprove && !mustChangePassword,
     refetchInterval: 30000,
   });
   const pendingApprovals = summaryQuery.data?.pending_approval ?? 0;
@@ -215,11 +217,20 @@ export function Layout() {
           </div>
         </header>
         <main className="flex-1 overflow-y-auto p-3 sm:p-4 bg-slate-50">
-          <Outlet />
+          {mustChangePassword ? (
+            <div className="text-sm text-slate-500">Choose a new password to continue.</div>
+          ) : (
+            <Outlet />
+          )}
         </main>
       </div>
 
-      <ChangePasswordModal open={changePasswordOpen} onClose={() => setChangePasswordOpen(false)} />
+      <ChangePasswordModal
+        open={changePasswordOpen || mustChangePassword}
+        required={mustChangePassword}
+        onClose={() => setChangePasswordOpen(false)}
+        onChanged={refreshUser}
+      />
     </div>
   );
 }

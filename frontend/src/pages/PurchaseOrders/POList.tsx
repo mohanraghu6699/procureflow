@@ -20,6 +20,16 @@ export function POList() {
   const [page, setPage] = useState(1);
   const pageSize = 10;
 
+  // Search and the dropdown filters (sorting is left as it is).
+  const filtersActive = Boolean(search || status || vendorId);
+
+  function clearFilters() {
+    setSearch("");
+    setStatus("");
+    setVendorId("");
+    setPage(1);
+  }
+
   function toggleSort(column: string) {
     if (sortBy === column) {
       setSortDir(sortDir === "asc" ? "desc" : "asc");
@@ -103,6 +113,13 @@ export function POList() {
             </option>
           ))}
         </select>
+        <button
+          onClick={clearFilters}
+          disabled={!filtersActive}
+          className="text-sm text-slate-600 border border-slate-200 rounded-lg px-3 py-2 hover:bg-slate-100 transition-colors disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+        >
+          Clear filters
+        </button>
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">

@@ -120,7 +120,7 @@ Master data, deactivated rather than deleted. A PR's or PO's vendor must be acti
 
 ### `users`
 
-Everyone who can sign in. The role (REQUESTER, APPROVER, ADMIN) drives what they may do; the department is optional.
+Everyone who can sign in. The role (REQUESTER, APPROVER, ADMIN) drives what they may do; the department is optional. Accounts with history are deactivated rather than deleted; only an account nothing points at can be deleted.
 
 | Column | Type | Null | Notes |
 |---|---|---|---|
@@ -130,7 +130,8 @@ Everyone who can sign in. The role (REQUESTER, APPROVER, ADMIN) drives what they
 | `password_hash` | `VARCHAR(255)` | no | bcrypt hash. The password itself is never stored. |
 | `role` | `user_role` | no |  |
 | `department_id` | `VARCHAR(36)` | yes | foreign key to `departments.id`; May be empty: a user need not belong to a department. |
-| `is_active` | `BOOLEAN` | no |  |
+| `is_active` | `BOOLEAN` | no | False blocks sign-in and ends any open session at once; the user's history stays. |
+| `must_change_password` | `BOOLEAN` | no | default `false`; Set when an admin creates the account or resets its password. The API refuses everything except `/api/auth/me` and the password change until the user has chosen a new one. |
 | `created_at` | `TIMESTAMP WITHOUT TIME ZONE` | no |  |
 
 Indexes: `ix_users_email` on (email) (unique).
@@ -236,6 +237,7 @@ Append-only delivery updates against a PO. Each update also moves the PO's `stat
 
 - **One active PO per PR.** The schema allows several POs per PR (`purchase_orders.pr_id` is a plain foreign key); the API refuses a second while the first is neither COMPLETED nor CANCELLED. A partial unique index would enforce it in the database (see the README's future enhancements).
 - **Cancelling a PO.** Only an OPEN order with no delivery updates can be cancelled, by an approver or admin, with a reason. The row is kept (soft cancel), so orders are never deleted.
+- **User administration.** Admins reset passwords (forcing a change at next sign-in), deactivate or reactivate accounts, and delete only accounts with no records pointing at them (requests, status changes, orders, deliveries). Nobody can reset, deactivate or delete their own account.
 - **Status transitions.** Which status may follow which is enforced by the API, not by database constraints. Every PR change is written to `pr_status_history`.
 - **Vendor must supply the category.** `vendor_categories` records what a vendor supplies; the API checks it when a vendor is chosen on a PR or PO.
 - **No self-approval, PO amount cap, delivery-date rules.** Business rules in the API layer.

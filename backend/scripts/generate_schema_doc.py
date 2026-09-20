@@ -27,7 +27,7 @@ README_PATH = REPO_ROOT / "README.md"
 START, END = "<!-- schema-diagram:start -->", "<!-- schema-diagram:end -->"
 
 TABLE_NOTES = {
-    "users": "Everyone who can sign in. The role (REQUESTER, APPROVER, ADMIN) drives what they may do; the department is optional.",
+    "users": "Everyone who can sign in. The role (REQUESTER, APPROVER, ADMIN) drives what they may do; the department is optional. Accounts with history are deactivated rather than deleted; only an account nothing points at can be deleted.",
     "departments": "Master data. Deactivated (`is_active = false`) rather than deleted, so history keeps its department.",
     "categories": "Master data, deactivated rather than deleted. A vendor supplies one or more categories.",
     "vendors": "Master data, deactivated rather than deleted. A PR's or PO's vendor must be active and supply the PR's category.",
@@ -51,12 +51,15 @@ COLUMN_NOTES = {
     ("pr_status_history", "from_status"): "Empty on the first row (creation).",
     ("deliveries", "delivery_date"): "Required when the status is DELIVERED; a calendar date.",
     ("users", "password_hash"): "bcrypt hash. The password itself is never stored.",
+    ("users", "is_active"): "False blocks sign-in and ends any open session at once; the user's history stays.",
+    ("users", "must_change_password"): "Set when an admin creates the account or resets its password. The API refuses everything except `/api/auth/me` and the password change until the user has chosen a new one.",
     ("users", "department_id"): "May be empty: a user need not belong to a department.",
 }
 
 RULES_IN_CODE = [
     "**One active PO per PR.** The schema allows several POs per PR (`purchase_orders.pr_id` is a plain foreign key); the API refuses a second while the first is neither COMPLETED nor CANCELLED. A partial unique index would enforce it in the database (see the README's future enhancements).",
     "**Cancelling a PO.** Only an OPEN order with no delivery updates can be cancelled, by an approver or admin, with a reason. The row is kept (soft cancel), so orders are never deleted.",
+    "**User administration.** Admins reset passwords (forcing a change at next sign-in), deactivate or reactivate accounts, and delete only accounts with no records pointing at them (requests, status changes, orders, deliveries). Nobody can reset, deactivate or delete their own account.",
     "**Status transitions.** Which status may follow which is enforced by the API, not by database constraints. Every PR change is written to `pr_status_history`.",
     "**Vendor must supply the category.** `vendor_categories` records what a vendor supplies; the API checks it when a vendor is chosen on a PR or PO.",
     "**No self-approval, PO amount cap, delivery-date rules.** Business rules in the API layer.",

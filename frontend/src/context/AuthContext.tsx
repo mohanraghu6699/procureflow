@@ -7,6 +7,8 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  // Re-reads the signed-in user from the server (for example after a required password change).
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -52,6 +54,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(loggedInUser);
   }
 
+  async function refreshUser() {
+    const freshUser = await fetchMe();
+    localStorage.setItem("user", JSON.stringify(freshUser));
+    setUser(freshUser);
+  }
+
   function logout() {
     localStorage.removeItem("access_token");
     localStorage.removeItem("user");
@@ -59,7 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser }}>{children}</AuthContext.Provider>
   );
 }
 
