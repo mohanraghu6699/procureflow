@@ -1,5 +1,7 @@
 # ProcureFlow — Purchase-to-Pay Management Application
 
+[![CI](https://github.com/mohanraghu6699/procureflow/actions/workflows/ci.yml/badge.svg)](https://github.com/mohanraghu6699/procureflow/actions/workflows/ci.yml)
+
 A small enterprise-style Purchase-to-Pay application covering the full business flow:
 
 **Purchase Request → Approval → Purchase Order → Delivery → Completion**
@@ -97,7 +99,7 @@ technical_assessment/
 
 ### Option A — Docker (recommended for quick evaluation)
 
-> Note: Docker was not available in the original development environment, so `docker-compose.yml` has not been run end-to-end locally — the images build from the same `requirements.txt`/`package.json` used in the manual setup below, which was fully tested. If you hit an issue, the manual setup is the verified fallback.
+> Verified in CI: every push builds all three images with `docker compose up --build` on a GitHub runner and smoke-tests the running stack (API health, seeded admin login, the old default password being rejected, and the frontend being served). It has not been run on the author's own machine, which has no Docker.
 
 ```bash
 copy .env.example .env      # then edit .env (macOS/Linux: cp); every value in it is required
@@ -301,7 +303,7 @@ All architectural and business-logic decisions (data model, status rules, role p
 - Test coverage is at the API level only: there are no frontend unit/component tests or browser end-to-end tests; the UI was verified manually. The API tests run on SQLite locally, so PostgreSQL-only behaviour (advisory lock, enum migration) is exercised only in CI/when `TEST_DATABASE_URL` is set.
 - No forgot-password flow: users can change their own password while logged in, but a forgotten password needs an admin to reissue one. User provisioning is admin-only (`POST /api/auth/users`) with no self-registration, which is appropriate for an internal procurement tool but worth calling out.
 - A Purchase Order is 1:1 with its Purchase Request (no partial/multi-PO fulfillment against a single PR).
-- `docker-compose.yml` is provided but not fully verified end-to-end in this environment (no local Docker) — see the setup note above.
+- The Docker Compose stack is exercised by CI on every push but has not been run on the author's own machine (no local Docker), so local-only problems such as port clashes would only show up when someone runs it.
 - CI is defined (`.github/workflows/ci.yml`) but there is no automated CD: cloud deployment is a script you run by hand (`deploy/gcp/`), and there is no staging/production split, custom domain or monitoring/alerting on it.
 - Rate limiting, refresh tokens and metrics/monitoring are not implemented (JWT access tokens are long-lived — 8 hours — for demo convenience rather than using refresh tokens). Logging is plain-text to stdout rather than JSON/shipped to a log service.
 - **The app runs over plain HTTP in this local setup (`http://localhost:8000`/`5173`), which is fine for local development only.** The login request sends the plaintext password in the request body — this is the standard, correct approach for password auth (the server must see it once to verify against the bcrypt hash; nothing beyond that comparison is stored or logged), but it depends entirely on transport encryption to be safe over a real network. **HTTPS/TLS is a hard requirement before any non-local deployment** — it is not optional hardening. Cloud Run (the GCP deployment target in `deploy/gcp/`) provides TLS termination automatically, which closes this gap for that deployment.
