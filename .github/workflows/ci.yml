@@ -8,7 +8,7 @@ on:
 jobs:
   backend:
     name: Backend tests (PostgreSQL)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: backend
@@ -29,8 +29,8 @@ jobs:
     env:
       TEST_DATABASE_URL: postgresql+psycopg2://procureflow:procureflow@localhost:5432/procureflow_test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -51,7 +51,7 @@ jobs:
 
   frontend:
     name: Frontend lint and build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend
@@ -59,8 +59,8 @@ jobs:
       # No fallback in the code: the build stops without it.
       VITE_API_BASE_URL: http://localhost:8000
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: 20
           cache: npm
@@ -71,7 +71,7 @@ jobs:
 
   docker:
     name: Docker Compose smoke test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       # docker-compose.yml takes every value from the environment; these are throwaway values for this CI run only.
       POSTGRES_USER: procureflow_ci
@@ -88,7 +88,7 @@ jobs:
       FRONTEND_HOST_PORT: "5173"
       SEED_ADMIN_PASSWORD: ci-smoke-test-pw
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Build and start the stack
         run: docker compose up --build -d
       - name: Wait for the API (migrations and seeding run first)
