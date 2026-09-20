@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Settings and helpers shared by deploy.sh and destroy.sh (sourced, not run directly).
-# Override any value from the environment, e.g.:
+# Settings and helpers shared by deploy.sh, update.sh and destroy.sh (sourced, not run directly).
+# Values come from deploy/gcp/.env (see .env.example); a variable set in the shell overrides the file, e.g.:
 #   PROJECT_ID=my-project REGION=europe-west1 bash deploy/gcp/deploy.sh
 
 # Note: do NOT set MSYS_NO_PATHCONV here. Git Bash's automatic path conversion is what lets gcloud's launcher

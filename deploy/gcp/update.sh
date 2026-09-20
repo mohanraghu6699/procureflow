@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Ships new code to an EXISTING deployment: rebuilds and redeploys the API and/or the web app.
-# Nothing else is touched. Cloud SQL, secrets, service accounts and permissions are left exactly as they are,
-# and the database keeps its data. Use deploy.sh once to create the infrastructure, then this for every code change.
+# Nothing else is touched: Cloud SQL, secrets, service accounts and permissions stay exactly as they are and the
+# database keeps its data (the one exception is --sync-passwords, below). Use deploy.sh once to create the
+# infrastructure, then this for every code change.
 #
 #   bash deploy/gcp/update.sh          # API + web (default)
 #   bash deploy/gcp/update.sh api      # backend only (includes its database migrations)
