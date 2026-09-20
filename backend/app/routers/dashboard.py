@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends
-from sqlalchemy import func
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -31,7 +31,16 @@ from app.schemas import (
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 
 # POStatus.DELIVERED is never assigned (delivering completes the PO), so it isn't summarised.
-PO_SUMMARY_STATUSES = [POStatus.OPEN, POStatus.IN_TRANSIT, POStatus.PARTIALLY_DELIVERED, POStatus.COMPLETED]
+PO_SUMMARY_STATUSES = [
+    POStatus.OPEN,
+    POStatus.IN_TRANSIT,
+    POStatus.PARTIALLY_DELIVERED,
+    POStatus.COMPLETED,
+    POStatus.CANCELLED,
+]
+
+# A cancelled order is still listed and counted, but it is no money spent or on order: amounts and spend skip it.
+LIVE_PO = PurchaseOrder.status != POStatus.CANCELLED
 
 ACTIVITY_VERB = {
     PRStatus.DRAFT: "created",
@@ -67,7 +76,7 @@ def get_summary(db: Session = Depends(get_db), current_user: User = Depends(get_
     # Actual PO price once ordered, otherwise the approved PR amount.
     total_spend = (
         pr_query.filter(PurchaseRequest.status.in_([PRStatus.APPROVED, PRStatus.COMPLETED]))
-        .outerjoin(PurchaseOrder, PurchaseOrder.pr_id == PurchaseRequest.id)
+        .outerjoin(PurchaseOrder, and_(PurchaseOrder.pr_id == PurchaseRequest.id, LIVE_PO))
         .with_entities(func.coalesce(func.sum(func.coalesce(PurchaseOrder.amount, PurchaseRequest.amount)), 0))
         .scalar()
     )
@@ -131,7 +140,7 @@ def get_summary(db: Session = Depends(get_db), current_user: User = Depends(get_
             db.query(func.coalesce(func.sum(func.coalesce(PurchaseOrder.amount, PurchaseRequest.amount)), 0))
             .select_from(PRStatusHistory)
             .join(PurchaseRequest, PRStatusHistory.pr_id == PurchaseRequest.id)
-            .outerjoin(PurchaseOrder, PurchaseOrder.pr_id == PurchaseRequest.id)
+            .outerjoin(PurchaseOrder, and_(PurchaseOrder.pr_id == PurchaseRequest.id, LIVE_PO))
         )
         if is_requester:
             q = q.filter(PurchaseRequest.requester_id == current_user.id)
@@ -170,7 +179,7 @@ def get_summary(db: Session = Depends(get_db), current_user: User = Depends(get_
         total_purchase_orders=total_pos,
         pending_delivery=pending_delivery,
         pr_amounts=_amounts_by_currency(pr_query, PurchaseRequest.currency, PurchaseRequest.amount),
-        po_amounts=_amounts_by_currency(po_query, PurchaseOrder.currency, PurchaseOrder.amount),
+        po_amounts=_amounts_by_currency(po_query.filter(LIVE_PO), PurchaseOrder.currency, PurchaseOrder.amount),
         total_spend_approved=Decimal(total_spend or 0),
         pr_by_status=pr_by_status,
         po_by_status=po_by_status,
@@ -192,8 +201,17 @@ def get_recent_activity(db: Session = Depends(get_db), current_user: User = Depe
         history_query = history_query.filter(PurchaseRequest.requester_id == current_user.id)
         delivery_query = delivery_query.filter(PurchaseRequest.requester_id == current_user.id)
 
+    cancelled_query = (
+        db.query(PurchaseOrder)
+        .join(PurchaseRequest, PurchaseOrder.pr_id == PurchaseRequest.id)
+        .filter(PurchaseOrder.status == POStatus.CANCELLED)
+    )
+    if current_user.role == UserRole.REQUESTER:
+        cancelled_query = cancelled_query.filter(PurchaseRequest.requester_id == current_user.id)
+
     history_items = history_query.order_by(PRStatusHistory.changed_at.desc()).limit(10).all()
     delivery_items = delivery_query.order_by(Delivery.updated_at.desc()).limit(10).all()
+    cancelled_items = cancelled_query.order_by(PurchaseOrder.cancelled_at.desc()).limit(10).all()
 
     activity: list[RecentActivityItem] = []
     for h in history_items:
@@ -212,6 +230,16 @@ def get_recent_activity(db: Session = Depends(get_db), current_user: User = Depe
                 type="delivery",
                 message=f"{d.purchase_order.po_number} delivery marked {d.status.value.lower().replace('_', ' ')}",
                 timestamp=d.updated_at,
+            )
+        )
+
+    for po in cancelled_items:
+        activity.append(
+            RecentActivityItem(
+                id=f"cancel-{po.id}",
+                type="purchase_order",
+                message=f"{po.po_number} cancelled",
+                timestamp=po.cancelled_at,
             )
         )
 

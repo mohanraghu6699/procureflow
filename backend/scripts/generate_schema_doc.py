@@ -34,7 +34,7 @@ TABLE_NOTES = {
     "vendor_categories": "Many-to-many link: which categories a vendor supplies. Rows are removed with either side (`ON DELETE CASCADE`).",
     "purchase_requests": "The request that starts the flow. `status` moves DRAFT, SUBMITTED, APPROVED or REJECTED, then COMPLETED once its order is delivered.",
     "pr_status_history": "Append-only audit trail: one row per status change, with who changed it, when and why. Independent of the mutable `purchase_requests` row.",
-    "purchase_orders": "The order raised against an approved PR. Keeps its own `amount` (at most the approved amount) and copies the PR's currency.",
+    "purchase_orders": "The order raised against an approved PR. Keeps its own `amount` (at most the approved amount) and copies the PR's currency. An OPEN order with no deliveries can be cancelled (status CANCELLED, with the reason, who and when); it stays on record and frees the PR for a new order.",
     "deliveries": "Append-only delivery updates against a PO. Each update also moves the PO's `status`; DELIVERED completes the PO and its PR.",
 }
 
@@ -45,6 +45,9 @@ COLUMN_NOTES = {
     ("purchase_requests", "vendor_id"): "Optional preferred vendor; a PO always has one.",
     ("purchase_orders", "amount"): "Order price. Never more than the approved PR amount.",
     ("purchase_orders", "currency"): "Copied from the PR.",
+    ("purchase_orders", "cancel_reason"): "Why the order was cancelled. Only set when `status` is CANCELLED.",
+    ("purchase_orders", "cancelled_by_id"): "Who cancelled it. Only set when `status` is CANCELLED.",
+    ("purchase_orders", "cancelled_at"): "When it was cancelled (UTC). Only set when `status` is CANCELLED.",
     ("pr_status_history", "from_status"): "Empty on the first row (creation).",
     ("deliveries", "delivery_date"): "Required when the status is DELIVERED; a calendar date.",
     ("users", "password_hash"): "bcrypt hash. The password itself is never stored.",
@@ -52,7 +55,8 @@ COLUMN_NOTES = {
 }
 
 RULES_IN_CODE = [
-    "**One active PO per PR.** The schema allows several POs per PR (`purchase_orders.pr_id` is a plain foreign key); the API refuses a second unless the first is COMPLETED. A partial unique index would enforce it in the database (see the README's future enhancements).",
+    "**One active PO per PR.** The schema allows several POs per PR (`purchase_orders.pr_id` is a plain foreign key); the API refuses a second while the first is neither COMPLETED nor CANCELLED. A partial unique index would enforce it in the database (see the README's future enhancements).",
+    "**Cancelling a PO.** Only an OPEN order with no delivery updates can be cancelled, by an approver or admin, with a reason. The row is kept (soft cancel), so orders are never deleted.",
     "**Status transitions.** Which status may follow which is enforced by the API, not by database constraints. Every PR change is written to `pr_status_history`.",
     "**Vendor must supply the category.** `vendor_categories` records what a vendor supplies; the API checks it when a vendor is chosen on a PR or PO.",
     "**No self-approval, PO amount cap, delivery-date rules.** Business rules in the API layer.",

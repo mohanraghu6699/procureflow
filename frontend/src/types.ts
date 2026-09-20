@@ -1,7 +1,7 @@
 export type UserRole = "REQUESTER" | "APPROVER" | "ADMIN";
 
 export type PRStatus = "DRAFT" | "SUBMITTED" | "APPROVED" | "REJECTED" | "COMPLETED";
-export type POStatus = "OPEN" | "IN_TRANSIT" | "PARTIALLY_DELIVERED" | "DELIVERED" | "COMPLETED";
+export type POStatus = "OPEN" | "IN_TRANSIT" | "PARTIALLY_DELIVERED" | "DELIVERED" | "COMPLETED" | "CANCELLED";
 export type DeliveryStatus = "PENDING" | "IN_TRANSIT" | "PARTIAL" | "DELIVERED";
 
 export interface User {
@@ -85,6 +85,10 @@ export interface PurchaseOrder {
   created_by_name?: string | null;
   created_at: string;
   updated_at: string;
+  // Present only on a cancelled order.
+  cancel_reason?: string | null;
+  cancelled_by_name?: string | null;
+  cancelled_at?: string | null;
 }
 
 export interface Delivery {

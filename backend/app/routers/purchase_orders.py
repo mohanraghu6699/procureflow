@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -18,6 +19,7 @@ from app.models import (
 from app.schemas import (
     DeliveryOut,
     PaginatedPurchaseOrders,
+    PurchaseOrderCancel,
     PurchaseOrderCreate,
     PurchaseOrderDetail,
     PurchaseOrderOut,
@@ -44,6 +46,9 @@ def _to_out(po: PurchaseOrder) -> PurchaseOrderOut:
         created_by_name=po.created_by.name if po.created_by else None,
         created_at=po.created_at,
         updated_at=po.updated_at,
+        cancel_reason=po.cancel_reason,
+        cancelled_by_name=po.cancelled_by.name if po.cancelled_by else None,
+        cancelled_at=po.cancelled_at,
     )
 
 
@@ -73,7 +78,8 @@ def create_purchase_order(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="A purchase order can only be created against an approved purchase request",
         )
-    if any(po.status != POStatus.COMPLETED for po in pr.purchase_orders):
+    # A cancelled order no longer counts: cancelling is how a wrong PO is replaced by a correct one.
+    if any(po.status not in (POStatus.COMPLETED, POStatus.CANCELLED) for po in pr.purchase_orders):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="This purchase request already has an active purchase order",
@@ -147,6 +153,38 @@ def list_purchase_orders(
     return PaginatedPurchaseOrders(
         items=[_to_out(po) for po in items], total=total, page=page, page_size=page_size
     )
+
+
+@router.post("/{po_id}/cancel", response_model=PurchaseOrderOut)
+def cancel_purchase_order(
+    po_id: str,
+    payload: PurchaseOrderCancel,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(UserRole.APPROVER, UserRole.ADMIN)),
+):
+    reason = (payload.reason or "").strip()
+    if not reason:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="A reason is required to cancel a purchase order"
+        )
+    po = _get_po_or_404(db, po_id)
+    if po.status == POStatus.CANCELLED:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This purchase order is already cancelled")
+    # Once goods are on the way (or any delivery update exists) the order is a real commitment: no cancelling.
+    if po.status != POStatus.OPEN or po.deliveries:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only an open purchase order with no delivery updates can be cancelled",
+        )
+
+    po.status = POStatus.CANCELLED
+    po.cancel_reason = reason
+    po.cancelled_by_id = current_user.id
+    po.cancelled_at = datetime.utcnow()
+    db.commit()
+    db.refresh(po)
+    logger.info("%s cancelled by %s: %s", po.po_number, current_user.email, reason)
+    return _to_out(po)
 
 
 @router.get("/{po_id}", response_model=PurchaseOrderDetail)

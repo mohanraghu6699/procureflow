@@ -220,6 +220,11 @@ export async function createPurchaseOrder(payload: { pr_id: string; vendor_id: s
   return data;
 }
 
+export async function cancelPurchaseOrder(id: string, reason: string) {
+  const { data } = await apiClient.post<PurchaseOrder>(`/api/purchase-orders/${id}/cancel`, { reason });
+  return data;
+}
+
 // ---------- Deliveries ----------
 
 export async function recordDelivery(

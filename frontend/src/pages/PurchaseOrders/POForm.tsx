@@ -69,8 +69,15 @@ export function POForm() {
               </option>
             ))}
           </select>
+          {approvedPRsQuery.isError && (
+            <p className="text-xs text-red-600 mt-1">
+              Could not load the approved purchase requests: {getErrorMessage(approvedPRsQuery.error)}
+            </p>
+          )}
           {approvedPRsQuery.data?.items.length === 0 && (
-            <p className="text-xs text-amber-600 mt-1">No approved purchase requests are available right now.</p>
+            <p className="text-xs text-amber-600 mt-1">
+              No approved purchase requests are waiting for a purchase order right now.
+            </p>
           )}
         </div>
 

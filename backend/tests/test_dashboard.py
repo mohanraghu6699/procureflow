@@ -18,7 +18,7 @@ def test_empty_dashboard_is_all_zeroes(api):
     assert float(data["total_spend_approved"]) == 0
     assert set(counts(data["pr_by_status"])) == {"DRAFT", "SUBMITTED", "APPROVED", "REJECTED", "COMPLETED"}
     assert all(v == 0 for v in counts(data["pr_by_status"]).values())
-    assert counts(data["po_by_status"]) == {"OPEN": 0, "IN_TRANSIT": 0, "PARTIALLY_DELIVERED": 0, "COMPLETED": 0}
+    assert counts(data["po_by_status"]) == {"OPEN": 0, "IN_TRANSIT": 0, "PARTIALLY_DELIVERED": 0, "COMPLETED": 0, "CANCELLED": 0}
     assert len(data["monthly_trend"]) == 9
     assert api.c.get("/api/dashboard/recent-activity", headers=api.h("admin")).json() == []
 
@@ -40,7 +40,7 @@ def test_counts_follow_the_workflow(api):
     assert data["total_purchase_orders"] == 3
     assert data["pending_delivery"] == 2
     assert counts(data["pr_by_status"]) == {"DRAFT": 1, "SUBMITTED": 1, "APPROVED": 2, "REJECTED": 1, "COMPLETED": 1}
-    assert counts(data["po_by_status"]) == {"OPEN": 1, "IN_TRANSIT": 1, "PARTIALLY_DELIVERED": 0, "COMPLETED": 1}
+    assert counts(data["po_by_status"]) == {"OPEN": 1, "IN_TRANSIT": 1, "PARTIALLY_DELIVERED": 0, "COMPLETED": 1, "CANCELLED": 0}
 
 
 def test_spend_uses_the_po_amount_once_ordered(api):

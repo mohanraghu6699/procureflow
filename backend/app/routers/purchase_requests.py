@@ -11,8 +11,10 @@ from app.dependencies import get_current_user, require_roles
 from app.models import (
     Category,
     Department,
+    POStatus,
     PRStatus,
     PRStatusHistory,
+    PurchaseOrder,
     PurchaseRequest,
     User,
     UserRole,
@@ -154,7 +156,8 @@ def list_purchase_requests(
     if status_filter is not None:
         query = query.filter(PurchaseRequest.status == status_filter)
     if awaiting_po:
-        query = query.filter(~PurchaseRequest.purchase_orders.any())
+        # Only cancelled orders don't count: a PR whose PO was cancelled is waiting for a new one.
+        query = query.filter(~PurchaseRequest.purchase_orders.any(PurchaseOrder.status != POStatus.CANCELLED))
     if department_id:
         query = query.filter(PurchaseRequest.department_id == department_id)
     if category_id:

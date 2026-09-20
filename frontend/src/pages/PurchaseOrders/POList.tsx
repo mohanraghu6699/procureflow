@@ -7,7 +7,7 @@ import { StatusBadge, statusLabel } from "../../components/StatusBadge";
 import type { POStatus } from "../../types";
 import { formatCurrency, openOrderDue } from "../../utils/format";
 
-const STATUSES: POStatus[] = ["OPEN", "IN_TRANSIT", "PARTIALLY_DELIVERED", "DELIVERED", "COMPLETED"];
+const STATUSES: POStatus[] = ["OPEN", "IN_TRANSIT", "PARTIALLY_DELIVERED", "DELIVERED", "COMPLETED", "CANCELLED"];
 
 
 export function POList() {
