@@ -10,6 +10,9 @@ export interface User {
   email: string;
   role: UserRole;
   department_id?: string | null;
+  is_active?: boolean;
+  // Set when an admin created the account or reset its password: the user must choose a new one first.
+  must_change_password?: boolean;
   department_name?: string | null;
 }
 

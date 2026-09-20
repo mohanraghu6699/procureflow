@@ -64,6 +64,9 @@ class User(Base):
     role = Column(Enum(UserRole, name="user_role"), nullable=False)
     department_id = Column(String(36), ForeignKey("departments.id"), nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
+    # Set when an admin creates the account or resets its password: the person must choose their own password
+    # before anything else (enforced by the API, see app/dependencies.py).
+    must_change_password = Column(Boolean, nullable=False, default=False, server_default=false())
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     department = relationship("Department", back_populates="users")

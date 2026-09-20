@@ -38,9 +38,15 @@ class UserOut(BaseModel):
     role: UserRole
     department_id: Optional[str] = None
     department_name: Optional[str] = None
+    is_active: bool = True
+    must_change_password: bool = False
 
     class Config:
         from_attributes = True
+
+
+class PasswordReset(BaseModel):
+    new_password: str = Field(min_length=6, max_length=100)
 
 
 class UserCreate(BaseModel):

@@ -9,10 +9,11 @@ from app.models import User, UserRole
 bearer_scheme = HTTPBearer(auto_error=False)
 
 
-def get_current_user(
+def get_user_allowing_password_change(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
+    """The signed-in user, even if they still have to choose a new password (used by /me and the password change)."""
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
@@ -24,6 +25,15 @@ def get_current_user(
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
+    return user
+
+
+def get_current_user(user: User = Depends(get_user_allowing_password_change)) -> User:
+    """The signed-in user for every other endpoint: refused until a required password change has been made."""
+    if user.must_change_password:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="You must change your password before continuing"
+        )
     return user
 
 

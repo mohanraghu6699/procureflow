@@ -129,6 +129,25 @@ export async function createUser(payload: UserCreatePayload) {
   return data;
 }
 
+export async function resetUserPassword(id: string, newPassword: string) {
+  const { data } = await apiClient.post<User>(`/api/auth/users/${id}/reset-password`, { new_password: newPassword });
+  return data;
+}
+
+export async function deactivateUser(id: string) {
+  const { data } = await apiClient.post<User>(`/api/auth/users/${id}/deactivate`);
+  return data;
+}
+
+export async function reactivateUser(id: string) {
+  const { data } = await apiClient.post<User>(`/api/auth/users/${id}/reactivate`);
+  return data;
+}
+
+export async function deleteUser(id: string) {
+  await apiClient.delete(`/api/auth/users/${id}`);
+}
+
 // ---------- Purchase Requests ----------
 
 export interface PRListParams {

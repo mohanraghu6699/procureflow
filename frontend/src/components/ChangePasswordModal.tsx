@@ -3,7 +3,15 @@ import { useMutation } from "@tanstack/react-query";
 import { changePassword } from "../api/endpoints";
 import { getErrorMessage } from "../api/client";
 
-export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+interface ChangePasswordModalProps {
+  open: boolean;
+  onClose: () => void;
+  // The user cannot dismiss the dialog: an admin set their password and they must choose their own.
+  required?: boolean;
+  onChanged?: () => void;
+}
+
+export function ChangePasswordModal({ open, onClose, required = false, onChanged }: ChangePasswordModalProps) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -44,9 +52,16 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      <div className="fixed inset-0 bg-slate-900/40" onClick={handleClose} />
+      <div className="fixed inset-0 bg-slate-900/40" onClick={required ? undefined : handleClose} />
       <div className="relative bg-white rounded-xl shadow-xl border border-slate-200 w-full max-w-sm p-5">
-        <div className="text-sm font-semibold text-slate-900 mb-4">Change Password</div>
+        <div className="text-sm font-semibold text-slate-900 mb-4">
+          {required ? "Choose a new password" : "Change Password"}
+        </div>
+        {required && !success && (
+          <p className="text-sm text-slate-500 -mt-2 mb-4">
+            Your password was set by an administrator. Choose your own to continue.
+          </p>
+        )}
 
         {success ? (
           <div className="space-y-4">
@@ -54,10 +69,13 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
               Password updated successfully.
             </div>
             <button
-              onClick={handleClose}
+              onClick={() => {
+                handleClose();
+                onChanged?.();
+              }}
               className="w-full bg-brand-500 hover:bg-brand-600 text-white text-sm font-medium rounded-lg px-4 py-2.5"
             >
-              Done
+              {required ? "Continue" : "Done"}
             </button>
           </div>
         ) : (
@@ -101,13 +119,15 @@ export function ChangePasswordModal({ open, onClose }: { open: boolean; onClose:
             {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
 
             <div className="flex justify-end gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleClose}
-                className="text-sm text-slate-600 border border-slate-200 rounded-lg px-3.5 py-2 hover:bg-slate-100 transition-colors"
-              >
-                Cancel
-              </button>
+              {!required && (
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  className="text-sm text-slate-600 border border-slate-200 rounded-lg px-3.5 py-2 hover:bg-slate-100 transition-colors"
+                >
+                  Cancel
+                </button>
+              )}
               <button
                 type="submit"
                 disabled={mutation.isPending}
