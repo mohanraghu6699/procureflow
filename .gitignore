@@ -1,2 +1,3 @@
-# Local secrets: the login passwords docker compose reads live in a .env next to docker-compose.yml.
+# Local environment files hold secrets (passwords, signing keys) and must never be committed. This matches a
+# ".env" in any folder; the committed templates are the ".env.example" files next to them.
 .env

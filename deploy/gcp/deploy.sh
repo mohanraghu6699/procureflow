@@ -5,7 +5,7 @@
 # Safe to re-run: existing resources are reused and both services are redeployed from the current code.
 # Remove everything again with deploy/gcp/destroy.sh.
 #
-# Run from anywhere:  bash deploy/gcp/deploy.sh      (Git Bash, WSL or Cloud Shell)
+# Run from anywhere:  bash deploy/gcp/deploy.sh      (Git Bash on Windows, or Cloud Shell)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

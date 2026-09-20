@@ -69,11 +69,11 @@ def test_trends_compare_this_period_to_the_last(api):
     api.submitted_pr()
 
     trends = summary(api)["trends"]
-    assert float(trends["prs_created_month"]["current"]) >= 0
+    assert float(trends["prs_created_month"]["current"]) == 2  # both requests were created just now
     assert float(trends["submitted_week"]["current"]) == 2
     assert float(trends["submitted_week"]["previous"]) == 0
     assert float(trends["ordered_week"]["current"]) == 1
-    assert float(trends["approved_spend_month"]["current"]) in (0, 650)  # 0 only if now is the 1st before the month started
+    assert float(trends["approved_spend_month"]["current"]) == 650  # the PO price, not the 700 requested
     assert set(trends) == {
         "prs_created_month",
         "pos_created_month",
