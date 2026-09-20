@@ -5,13 +5,16 @@ Use two browser profiles (or a normal + an incognito window) so you can stay log
 
 ## Accounts (seeded)
 
-| Role | Login | Password |
-|---|---|---|
-| Requester | rohan.sharma@procureflow.com | Requester@123 |
-| Requester | priya.nair@procureflow.com | Requester@123 |
-| Approver | sameer.khan@procureflow.com | Approver@123 |
-| Approver | amit.patel@procureflow.com | Approver@123 |
-| Admin | admin@procureflow.com | Admin@123 |
+| Role | Login |
+|---|---|
+| Requester | rohan.sharma@procureflow.com |
+| Requester | priya.nair@procureflow.com |
+| Approver | sameer.khan@procureflow.com |
+| Approver | amit.patel@procureflow.com |
+| Admin | admin@procureflow.com |
+
+Passwords are not kept in the repo. They come from the `SEED_*_PASSWORD` variables, or are generated and printed once
+when the database is first seeded (see the README, "Login accounts").
 
 ## Vendors per category (seeded)
 

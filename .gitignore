@@ -1,0 +1,2 @@
+# Local secrets: the login passwords docker compose reads live in a .env next to docker-compose.yml.
+.env
