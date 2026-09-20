@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { ChangePasswordModal } from "./ChangePasswordModal";
 import { fetchDashboardSummary } from "../api/endpoints";
 import { useAuth } from "../context/AuthContext";
+import { useDismiss } from "../hooks/useDismiss";
 
 const NAV_ITEMS = [
   { to: "/dashboard", label: "Dashboard", icon: "🏠" },
@@ -21,6 +22,8 @@ export function Layout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [profileOpen, setProfileOpen] = useState(false);
+  const profileRef = useRef<HTMLDivElement>(null);
+  useDismiss(profileRef, profileOpen, () => setProfileOpen(false));
   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
@@ -166,7 +169,7 @@ export function Layout() {
           </button>
 
           <div className="ml-auto flex items-center gap-2 sm:gap-4">
-            <div className="relative">
+            <div className="relative" ref={profileRef}>
               <button onClick={() => setProfileOpen((v) => !v)} className="flex items-center gap-3">
                 <div className="text-right hidden sm:block">
                   <div className="text-sm font-medium text-slate-800">{user?.name}</div>
@@ -182,28 +185,25 @@ export function Layout() {
               </button>
 
               {profileOpen && (
-                <>
-                  <div className="fixed inset-0 z-10" onClick={() => setProfileOpen(false)} />
-                  <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-lg z-20 p-4">
-                    <div className="text-sm font-semibold text-slate-900">{user?.name}</div>
-                    <div className="text-xs text-slate-500 mt-0.5 break-all">{user?.email}</div>
-                    <div className="flex items-center gap-2 mt-3 text-xs">
-                      <span className="bg-brand-50 text-brand-700 rounded-full px-2 py-0.5 font-medium">
-                        {user?.role}
-                      </span>
-                      {user?.department_name && <span className="text-slate-500">{user.department_name}</span>}
-                    </div>
-                    <button
-                      onClick={() => {
-                        setProfileOpen(false);
-                        setChangePasswordOpen(true);
-                      }}
-                      className="w-full text-left text-sm text-slate-600 hover:text-brand-600 mt-4 pt-3 border-t border-slate-100"
-                    >
-                      Change Password
-                    </button>
+                <div className="absolute right-0 top-full mt-2 w-64 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-lg z-20 p-4">
+                  <div className="text-sm font-semibold text-slate-900">{user?.name}</div>
+                  <div className="text-xs text-slate-500 mt-0.5 break-all">{user?.email}</div>
+                  <div className="flex items-center gap-2 mt-3 text-xs">
+                    <span className="bg-brand-50 text-brand-700 rounded-full px-2 py-0.5 font-medium">
+                      {user?.role}
+                    </span>
+                    {user?.department_name && <span className="text-slate-500">{user.department_name}</span>}
                   </div>
-                </>
+                  <button
+                    onClick={() => {
+                      setProfileOpen(false);
+                      setChangePasswordOpen(true);
+                    }}
+                    className="w-full text-left text-sm text-slate-600 hover:text-brand-600 mt-4 pt-3 border-t border-slate-100"
+                  >
+                    Change Password
+                  </button>
+                </div>
               )}
             </div>
             <button

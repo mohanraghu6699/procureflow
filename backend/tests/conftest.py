@@ -8,6 +8,13 @@ import os
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-key-for-pytest")
 TEST_DB_URL = os.environ.get("TEST_DATABASE_URL", "sqlite://")
 os.environ["DATABASE_URL"] = TEST_DB_URL  # satisfies app settings; the app's own engine is unused in tests
+# The app has no built-in defaults, so the tests pin every setting: they never depend on someone's .env or shell.
+os.environ.update(
+    JWT_ALGORITHM="HS256",
+    ACCESS_TOKEN_EXPIRE_MINUTES="480",
+    LOG_LEVEL="INFO",
+    CORS_ORIGINS="http://localhost:5173,http://127.0.0.1:5173",
+)
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

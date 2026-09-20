@@ -7,6 +7,12 @@ export function formatCurrency(amount: string | number): string {
   return amountFormatter.format(Number(amount));
 }
 
+// "AED 12,345.00 · USD 1,200.00" — one entry per currency, because a total across currencies means nothing.
+export function formatAmounts(totals: { currency: string; amount: string }[]): string {
+  if (totals.length === 0) return `AED ${formatCurrency(0)}`;
+  return totals.map((t) => `${t.currency} ${formatCurrency(t.amount)}`).join(" · ");
+}
+
 // Today (or any date) as YYYY-MM-DD in the viewer's local timezone.
 export function localDate(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");

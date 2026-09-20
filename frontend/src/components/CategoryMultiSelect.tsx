@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useDismiss } from "../hooks/useDismiss";
 
 interface Option {
   id: string;
@@ -24,6 +25,8 @@ export function CategoryMultiSelect({
   placeholder?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useDismiss(rootRef, open, () => setOpen(false));
   const summary = summarise(options, selected, placeholder);
 
   function toggle(id: string) {
@@ -31,7 +34,7 @@ export function CategoryMultiSelect({
   }
 
   return (
-    <div className="relative" onKeyDown={(e) => e.key === "Escape" && setOpen(false)}>
+    <div className="relative" ref={rootRef}>
       <button
         type="button"
         aria-expanded={open}
@@ -43,26 +46,23 @@ export function CategoryMultiSelect({
       </button>
 
       {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto py-1">
-            {options.length === 0 && <div className="px-3 py-2 text-sm text-slate-400">No categories available</div>}
-            {options.map((o) => (
-              <label
-                key={o.id}
-                className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-brand-50 cursor-pointer"
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.includes(o.id)}
-                  onChange={() => toggle(o.id)}
-                  className="h-4 w-4 rounded border-slate-300 accent-brand-500"
-                />
-                {o.name}
-              </label>
-            ))}
-          </div>
-        </>
+        <div className="absolute left-0 right-0 top-full mt-1 z-20 bg-white border border-slate-200 rounded-lg shadow-lg max-h-56 overflow-y-auto py-1">
+          {options.length === 0 && <div className="px-3 py-2 text-sm text-slate-400">No categories available</div>}
+          {options.map((o) => (
+            <label
+              key={o.id}
+              className="flex items-center gap-2.5 px-3 py-2 text-sm text-slate-700 hover:bg-brand-50 cursor-pointer"
+            >
+              <input
+                type="checkbox"
+                checked={selected.includes(o.id)}
+                onChange={() => toggle(o.id)}
+                className="h-4 w-4 rounded border-slate-300 accent-brand-500"
+              />
+              {o.name}
+            </label>
+          ))}
+        </div>
       )}
     </div>
   );

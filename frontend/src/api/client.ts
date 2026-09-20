@@ -1,6 +1,12 @@
 import axios from "axios";
 
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+// No fallback on purpose: the API address comes from the environment only (frontend/.env, or a build
+// argument in Docker and Cloud Build). vite.config.ts refuses to start or build without it.
+const apiBaseUrl: string | undefined = import.meta.env.VITE_API_BASE_URL;
+if (!apiBaseUrl) {
+  throw new Error("VITE_API_BASE_URL is not set. Add it to frontend/.env (see .env.example).");
+}
+export const API_BASE_URL: string = apiBaseUrl;
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

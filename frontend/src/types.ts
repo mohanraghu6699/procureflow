@@ -110,11 +110,18 @@ export interface Paginated<T> {
   page_size: number;
 }
 
+export interface CurrencyTotal {
+  currency: string;
+  amount: string;
+}
+
 export interface DashboardSummary {
   total_purchase_requests: number;
   pending_approval: number;
   total_purchase_orders: number;
   pending_delivery: number;
+  pr_amounts: CurrencyTotal[];
+  po_amounts: CurrencyTotal[];
   total_spend_approved: string;
   pr_by_status: { status: string; count: number }[];
   po_by_status: { status: string; count: number }[];

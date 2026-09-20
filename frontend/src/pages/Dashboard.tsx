@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+import { Banknote, Clock, FileText, Minus, Package, TrendingDown, TrendingUp, Truck, type LucideIcon } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -15,9 +16,10 @@ import {
   YAxis,
 } from "recharts";
 import { fetchDashboardSummary, fetchRecentActivity, listPurchaseRequests } from "../api/endpoints";
+import { ChartTooltip } from "../components/ChartTooltip";
 import { StatusBadge, statusLabel } from "../components/StatusBadge";
 import { useAuth } from "../context/AuthContext";
-import { describeTrend, formatCurrency, type TrendInfo } from "../utils/format";
+import { describeTrend, formatAmounts, formatCurrency, type TrendInfo } from "../utils/format";
 
 const STATUS_COLORS: Record<string, string> = {
   DRAFT: "#898781",
@@ -44,29 +46,34 @@ function formatRelativeTime(iso: string) {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-const TREND_STYLE: Record<TrendInfo["tone"], { arrow: string; cls: string }> = {
-  up: { arrow: "▲", cls: "text-emerald-600" },
-  down: { arrow: "▼", cls: "text-red-600" },
-  flat: { arrow: "–", cls: "text-slate-400" },
+const TREND_STYLE: Record<TrendInfo["tone"], { Icon: LucideIcon; cls: string }> = {
+  up: { Icon: TrendingUp, cls: "text-emerald-600" },
+  down: { Icon: TrendingDown, cls: "text-red-600" },
+  flat: { Icon: Minus, cls: "text-slate-400" },
 };
 
 function StatCard({
   label,
   value,
+  amount,
   trend,
   accent,
-  icon,
+  Icon,
 }: {
   label: string;
   value: string;
+  amount?: string;
   trend?: TrendInfo;
   accent: string;
-  icon: string;
+  Icon: LucideIcon;
 }) {
+  const TrendIcon = trend ? TREND_STYLE[trend.tone].Icon : null;
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-3.5">
       <div className="flex items-center gap-2.5">
-        <div className={`w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-base ${accent}`}>{icon}</div>
+        <div className={`w-9 h-9 shrink-0 rounded-lg flex items-center justify-center text-white ${accent}`}>
+          <Icon size={18} strokeWidth={2} aria-hidden />
+        </div>
         <div className="min-w-0 flex flex-col justify-center">
           <div className="text-[11px] font-medium text-slate-500 leading-tight">{label}</div>
           <div className="text-lg 2xl:text-2xl font-semibold text-slate-900 leading-tight mt-0.5 whitespace-nowrap">
@@ -74,10 +81,14 @@ function StatCard({
           </div>
         </div>
       </div>
-      <div className={`text-xs mt-2 flex items-center gap-1 min-h-[1rem] ${trend ? TREND_STYLE[trend.tone].cls : ""}`}>
-        {trend && (
+      {/* Reserved on every card so the trend lines stay level across the row. */}
+      <div className="text-xs text-slate-600 font-medium mt-2 min-h-[1rem] truncate" title={amount}>
+        {amount}
+      </div>
+      <div className={`text-xs mt-1 flex items-center gap-1 min-h-[1rem] ${trend ? TREND_STYLE[trend.tone].cls : ""}`}>
+        {trend && TrendIcon && (
           <>
-            <span aria-hidden>{TREND_STYLE[trend.tone].arrow}</span>
+            <TrendIcon size={14} strokeWidth={2.25} aria-hidden className="shrink-0" />
             {trend.text}
           </>
         )}
@@ -104,10 +115,13 @@ export function Dashboard() {
   const summary = summaryQuery.data;
   const trends = summary?.trends;
   const [statusView, setStatusView] = useState<"PR" | "PO">("PR");
+  // The donut slice under the pointer: its count and status take over the centre instead of a floating tooltip.
+  const [hoveredStatus, setHoveredStatus] = useState<string | null>(null);
   const slices = (statusView === "PR" ? summary?.pr_by_status : summary?.po_by_status) ?? [];
   const colors = statusView === "PR" ? STATUS_COLORS : PO_COLORS;
   const total = slices.reduce((n, s) => n + s.count, 0);
   const pieData = total > 0 ? slices : [{ status: "NONE", count: 1 }];
+  const hoveredSlice = hoveredStatus ? slices.find((s) => s.status === hoveredStatus) : undefined;
 
   const chartRowCols =
     "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1.25fr)_minmax(0,1fr)] gap-3";
@@ -128,32 +142,34 @@ export function Dashboard() {
         <StatCard
           label="Total Purchase Requests"
           value={String(summary?.total_purchase_requests ?? "—")}
+          amount={summary && `${formatAmounts(summary.pr_amounts)} requested`}
           trend={trends && describeTrend(trends.prs_created_month, "month", "created")}
-          accent="bg-blue-500" icon="📄"
+          accent="bg-blue-500" Icon={FileText}
         />
         <StatCard
           label="Pending Approval"
           value={String(summary?.pending_approval ?? "—")}
           trend={trends && describeTrend(trends.submitted_week, "week", "submitted")}
-          accent="bg-amber-500" icon="⏳"
+          accent="bg-amber-500" Icon={Clock}
         />
         <StatCard
           label="Total Purchase Orders"
           value={String(summary?.total_purchase_orders ?? "—")}
+          amount={summary && `${formatAmounts(summary.po_amounts)} ordered`}
           trend={trends && describeTrend(trends.pos_created_month, "month", "created")}
-          accent="bg-emerald-500" icon="📦"
+          accent="bg-emerald-500" Icon={Package}
         />
         <StatCard
           label="Pending Delivery"
           value={String(summary?.pending_delivery ?? "—")}
           trend={trends && describeTrend(trends.ordered_week, "week", "ordered")}
-          accent="bg-violet-500" icon="🚚"
+          accent="bg-violet-500" Icon={Truck}
         />
         <StatCard
           label="Total Spend (Approved)"
           value={summary ? `AED ${formatCurrency(summary.total_spend_approved)}` : "—"}
           trend={trends && describeTrend(trends.approved_spend_month, "month", "approved", true)}
-          accent="bg-slate-700" icon="💰"
+          accent="bg-slate-700" Icon={Banknote}
         />
       </div>
 
@@ -167,7 +183,10 @@ export function Dashboard() {
               {(["PR", "PO"] as const).map((view) => (
                 <button
                   key={view}
-                  onClick={() => setStatusView(view)}
+                  onClick={() => {
+                    setStatusView(view);
+                    setHoveredStatus(null);
+                  }}
                   className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
                     statusView === view ? "bg-brand-500 text-white" : "text-slate-500 hover:bg-slate-100"
                   }`}
@@ -191,19 +210,31 @@ export function Dashboard() {
                     outerRadius={70}
                     paddingAngle={total > 0 ? 2 : 0}
                     isAnimationActive={false}
+                    onMouseEnter={(_, index) => total > 0 && setHoveredStatus(pieData[index]?.status ?? null)}
+                    onMouseLeave={() => setHoveredStatus(null)}
                   >
                     {pieData.map((entry) => (
-                      <Cell key={entry.status} fill={colors[entry.status] ?? "#e5e7eb"} stroke="#fff" strokeWidth={2} />
+                      <Cell
+                        key={entry.status}
+                        fill={colors[entry.status] ?? "#e5e7eb"}
+                        fillOpacity={hoveredStatus && hoveredStatus !== entry.status ? 0.4 : 1}
+                        stroke="#fff"
+                        strokeWidth={2}
+                      />
                     ))}
                   </Pie>
-                  {total > 0 && (
-                    <Tooltip formatter={(value, _name, item) => [value, statusLabel(item.payload.status)]} />
-                  )}
                 </PieChart>
               </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <div className="text-2xl font-semibold text-slate-900 leading-none">{total}</div>
-                <div className="text-xs text-slate-400 mt-1">Total</div>
+              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none px-7 text-center">
+                <div
+                  className="text-2xl font-semibold leading-none text-slate-900"
+                  style={hoveredSlice ? { color: colors[hoveredSlice.status] } : undefined}
+                >
+                  {hoveredSlice ? hoveredSlice.count : total}
+                </div>
+                <div className="text-[11px] leading-tight text-slate-400 mt-1">
+                  {hoveredSlice ? statusLabel(hoveredSlice.status) : "Total"}
+                </div>
               </div>
             </div>
             <div className="space-y-2 min-w-[9rem] flex-1">
@@ -230,7 +261,12 @@ export function Dashboard() {
               <CartesianGrid strokeDasharray="3 3" stroke="#e1e0d9" vertical={false} />
               <XAxis dataKey="month" interval={0} tick={{ fontSize: 11, fill: "#898781" }} axisLine={{ stroke: "#c3c2b7" }} tickLine={false} />
               <YAxis tick={{ fontSize: 12, fill: "#898781" }} axisLine={false} tickLine={false} allowDecimals={false} />
-              <Tooltip itemSorter={(item) => (item.dataKey === "pr_count" ? 0 : 1)} />
+              <Tooltip
+                isAnimationActive={false}
+                cursor={{ fill: "rgba(148, 163, 184, 0.14)" }}
+                content={<ChartTooltip order={["pr_count", "po_count"]} />}
+                wrapperStyle={{ zIndex: 30 }}
+              />
               <Legend wrapperStyle={{ fontSize: 12 }} itemSorter={(item) => (item.dataKey === "pr_count" ? 0 : 1)} />
               <Bar dataKey="pr_count" name="PRs" fill="#2a78d6" radius={[4, 4, 0, 0]} maxBarSize={22} />
               <Bar dataKey="po_count" name="POs" fill="#eb6834" radius={[4, 4, 0, 0]} maxBarSize={22} />

@@ -1,13 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getErrorMessage } from "../api/client";
-
-const DEMO_ACCOUNTS = [
-  { role: "Admin", email: "admin@procureflow.com", password: "Admin@123" },
-  { role: "Requester", email: "rohan.sharma@procureflow.com", password: "Requester@123" },
-  { role: "Approver", email: "sameer.khan@procureflow.com", password: "Approver@123" },
-];
 
 export function Login() {
   const { login } = useAuth();
@@ -16,6 +10,14 @@ export function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [slow, setSlow] = useState(false);
+
+  // After a quiet period the server has to start up again, which can take ~20s. Say so instead of looking hung.
+  useEffect(() => {
+    if (!loading) return;
+    const timer = setTimeout(() => setSlow(true), 3000);
+    return () => clearTimeout(timer);
+  }, [loading]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -28,12 +30,8 @@ export function Login() {
       setError(getErrorMessage(err));
     } finally {
       setLoading(false);
+      setSlow(false);
     }
-  }
-
-  function fillDemo(demoEmail: string, demoPassword: string) {
-    setEmail(demoEmail);
-    setPassword(demoPassword);
   }
 
   return (
@@ -77,6 +75,11 @@ export function Login() {
           </div>
 
           {error && <div className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+          {slow && (
+            <div className="text-sm text-slate-600 bg-slate-50 rounded-lg px-3 py-2">
+              Still working — the server may be waking up after being idle. This can take up to 20 seconds.
+            </div>
+          )}
 
           <button
             type="submit"
@@ -87,21 +90,6 @@ export function Login() {
           </button>
         </form>
 
-        <div className="mt-6 pt-5 border-t border-slate-100">
-          <div className="text-xs font-medium text-slate-400 mb-2">Demo accounts</div>
-          <div className="space-y-1.5">
-            {DEMO_ACCOUNTS.map((acc) => (
-              <button
-                key={acc.email}
-                onClick={() => fillDemo(acc.email, acc.password)}
-                className="w-full text-left text-xs bg-slate-50 hover:bg-slate-100 rounded-lg px-3 py-2 flex items-center justify-between"
-              >
-                <span className="font-medium text-slate-600">{acc.role}</span>
-                <span className="text-slate-400">{acc.email}</span>
-              </button>
-            ))}
-          </div>
-        </div>
       </div>
     </div>
   );

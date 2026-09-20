@@ -290,11 +290,20 @@ class DashboardTrends(BaseModel):
     approved_spend_month: TrendPoint
 
 
+class CurrencyTotal(BaseModel):
+    currency: str
+    amount: Decimal
+
+
 class DashboardSummary(BaseModel):
     total_purchase_requests: int
     pending_approval: int
     total_purchase_orders: int
     pending_delivery: int
+    # Sum of the amounts on those requests / orders, kept per currency (a PR can be in AED, USD, ...),
+    # largest first. Same scope as the counts above (a requester only sees their own).
+    pr_amounts: list[CurrencyTotal]
+    po_amounts: list[CurrencyTotal]
     total_spend_approved: Decimal
     pr_by_status: list[StatusCount]
     po_by_status: list[StatusCount]

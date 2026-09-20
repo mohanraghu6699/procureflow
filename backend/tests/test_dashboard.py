@@ -124,3 +124,53 @@ def test_recent_activity_is_scoped_for_requesters(api):
 def test_dashboard_requires_authentication(client):
     assert client.get("/api/dashboard/summary").status_code == 401
     assert client.get("/api/dashboard/recent-activity").status_code == 401
+
+
+def totals(rows):
+    return {row["currency"]: float(row["amount"]) for row in rows}
+
+
+def order(api, pr_amount, po_amount, currency="AED", user="rohan"):
+    """An approved request for pr_amount that has been ordered at po_amount."""
+    pr = api.approved_pr(user, amount=pr_amount, currency=currency)
+    assert api.create_po(pr["id"], amount=po_amount).status_code == 201
+
+
+def test_amounts_are_empty_with_no_data(api):
+    data = summary(api)
+    assert data["pr_amounts"] == [] and data["po_amounts"] == []
+
+
+def test_amounts_total_every_request_and_order(api):
+    api.create_pr(amount=100)  # a draft still counts, like it does in the request count
+    rejected = api.submitted_pr(amount=250)
+    api.reject(rejected["id"])
+    order(api, pr_amount=900, po_amount=800)  # ordered below the approved amount
+
+    data = summary(api)
+    assert data["total_purchase_requests"] == 3
+    assert totals(data["pr_amounts"]) == {"AED": 100 + 250 + 900}
+    assert totals(data["po_amounts"]) == {"AED": 800}  # the PO's own price, not the PR's
+
+
+def test_amounts_are_kept_per_currency_largest_first(api):
+    api.create_pr(amount=100, currency="AED")
+    api.create_pr(amount=50, currency="USD")
+    api.create_pr(amount=300, currency="USD")
+    order(api, pr_amount=40, po_amount=40, currency="EUR")
+
+    data = summary(api)
+    assert [r["currency"] for r in data["pr_amounts"]] == ["USD", "AED", "EUR"]  # 350, 100, 40
+    assert totals(data["pr_amounts"]) == {"USD": 350, "AED": 100, "EUR": 40}
+    assert totals(data["po_amounts"]) == {"EUR": 40}  # the order inherits its PR's currency
+
+
+def test_amounts_only_include_the_requesters_own_records(api):
+    order(api, pr_amount=500, po_amount=500, user="rohan")
+    api.create_pr("priya", amount=70)
+
+    assert totals(summary(api, "rohan")["pr_amounts"]) == {"AED": 500}
+    assert totals(summary(api, "rohan")["po_amounts"]) == {"AED": 500}
+    assert totals(summary(api, "priya")["pr_amounts"]) == {"AED": 70}
+    assert summary(api, "priya")["po_amounts"] == []
+    assert totals(summary(api, "sameer")["pr_amounts"]) == {"AED": 570}

@@ -1,17 +1,21 @@
+# Every value below comes from the environment: a ".env" file next to this one (copy .env.example) or your shell.
+# ${VAR:?message} = required (docker compose stops and names it if it is missing);
+# ${VAR:-} = optional (empty when unset).
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: procureflow_app
-      POSTGRES_PASSWORD: procureflow_dev_pw123
-      POSTGRES_DB: procureflow
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
     ports:
-      - "5432:5432"
+      - "${DB_HOST_PORT:?Set DB_HOST_PORT in .env}:5432"
     volumes:
       - procureflow_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U procureflow_app -d procureflow"]
+      # $$ passes a literal $ so the variables are read inside the container, where the image already has them.
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -20,12 +24,20 @@ services:
     build: ./backend
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql+psycopg2://procureflow_app:procureflow_dev_pw123@db:5432/procureflow
-      JWT_SECRET_KEY: change-this-to-a-long-random-string-in-production
-      JWT_ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 480
+      # Built from the database settings above; use only URL-safe characters in POSTGRES_PASSWORD.
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:?Set JWT_ALGORITHM in .env}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:?Set ACCESS_TOKEN_EXPIRE_MINUTES in .env}
+      LOG_LEVEL: ${LOG_LEVEL:?Set LOG_LEVEL in .env}
+      CORS_ORIGINS: ${CORS_ORIGINS:?Set CORS_ORIGINS in .env}
+      # Login passwords for the seeded accounts (used only when the database is first created).
+      # Any left empty gets a random password, printed once by: docker compose logs backend
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-}
+      SEED_REQUESTER_PASSWORD: ${SEED_REQUESTER_PASSWORD:-}
+      SEED_APPROVER_PASSWORD: ${SEED_APPROVER_PASSWORD:-}
     ports:
-      - "8000:8000"
+      - "${BACKEND_HOST_PORT:?Set BACKEND_HOST_PORT in .env}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -34,10 +46,11 @@ services:
     build:
       context: ./frontend
       args:
-        VITE_API_BASE_URL: http://localhost:8000
+        # Baked into the JavaScript at build time: the address a browser uses to reach the backend.
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:?Set VITE_API_BASE_URL in .env}
     restart: unless-stopped
     ports:
-      - "5173:80"
+      - "${FRONTEND_HOST_PORT:?Set FRONTEND_HOST_PORT in .env}:80"
     depends_on:
       - backend
 
